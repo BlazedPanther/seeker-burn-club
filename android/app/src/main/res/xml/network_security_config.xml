@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Network Security Configuration for Seeker Burn Club.
+  - Forbids cleartext (HTTP) traffic entirely.
+  - Allows only system-trusted CAs for TLS in release.
+  - Debug builds additionally trust user-installed CAs (e.g., Charles Proxy).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

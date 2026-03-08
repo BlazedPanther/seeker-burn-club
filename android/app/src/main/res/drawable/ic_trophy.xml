@@ -1,0 +1,29 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Cup body -->
+    <path
+        android:pathData="M7,4L17,4L17,8C17,11.31 14.76,14.1 12,14.1C9.24,14.1 7,11.31 7,8L7,4Z"
+        android:fillColor="#FFAB40"/>
+    <!-- Left handle -->
+    <path
+        android:pathData="M5,5L7,5L7,8.5C7,9 6.5,9.5 6,9.5L4,9.5C3.45,9.5 3,9.05 3,8.5L3,7C3,5.9 3.9,5 5,5Z"
+        android:fillColor="#FF8F00"/>
+    <!-- Right handle -->
+    <path
+        android:pathData="M17,5L19,5C20.1,5 21,5.9 21,7L21,8.5C21,9.05 20.55,9.5 20,9.5L18,9.5C17.5,9.5 17,9 17,8.5L17,5Z"
+        android:fillColor="#FF8F00"/>
+    <!-- Base -->
+    <path
+        android:pathData="M10,15L14,15L14,17L10,17Z"
+        android:fillColor="#FFAB40"/>
+    <path
+        android:pathData="M8,17L16,17L16,19C16,19.55 15.55,20 15,20L9,20C8.45,20 8,19.55 8,19L8,17Z"
+        android:fillColor="#FF8F00"/>
+    <!-- Star -->
+    <path
+        android:pathData="M12,6L12.9,8.5L15.5,8.5L13.3,10L14.2,12.5L12,11L9.8,12.5L10.7,10L8.5,8.5L11.1,8.5Z"
+        android:fillColor="#FFFFFF"/>
+</vector>

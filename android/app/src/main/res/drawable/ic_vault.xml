@@ -1,0 +1,37 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Building -->
+    <path
+        android:pathData="M4,4L20,4C20.55,4 21,4.45 21,5L21,20C21,20.55 20.55,21 20,21L4,21C3.45,21 3,20.55 3,20L3,5C3,4.45 3.45,4 4,4Z"
+        android:fillColor="#27272A"/>
+    <!-- Roof -->
+    <path
+        android:pathData="M2,4L22,4L22,7L2,7Z"
+        android:fillColor="#52525B"/>
+    <!-- Columns -->
+    <path android:pathData="M6,7L6,21" android:strokeColor="#3F3F46" android:strokeWidth="1.5" android:fillColor="#00000000"/>
+    <path android:pathData="M10,7L10,21" android:strokeColor="#3F3F46" android:strokeWidth="1.5" android:fillColor="#00000000"/>
+    <path android:pathData="M14,7L14,21" android:strokeColor="#3F3F46" android:strokeWidth="1.5" android:fillColor="#00000000"/>
+    <path android:pathData="M18,7L18,21" android:strokeColor="#3F3F46" android:strokeWidth="1.5" android:fillColor="#00000000"/>
+    <!-- Pediment -->
+    <path
+        android:pathData="M4,4L12,1L20,4"
+        android:strokeColor="#A1A1AA"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+    <!-- Lock -->
+    <path
+        android:pathData="M10,14L14,14L14,18L10,18Z"
+        android:fillColor="#FF6B35"/>
+    <path
+        android:pathData="M11,14L11,12C11,11.45 11.45,11 12,11L12,11C12.55,11 13,11.45 13,12L13,14"
+        android:strokeColor="#FF6B35"
+        android:strokeWidth="1.2"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"/>
+</vector>

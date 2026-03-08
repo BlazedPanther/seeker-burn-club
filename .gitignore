@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.apk
+*.aab
+
+# Environment
+.env
+.env.local
+.env.*.local
+backend/.env.devnet
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# MWA debug artifacts
+_mwa_inspect/
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+android/.externalNativeBuild/
+android/.cxx/
+
+# Backend
+backend/node_modules/
+backend/dist/
+
+# Solana keypairs (NEVER commit)
+*-keypair.json
+*.keypair
+*secret*.json
+backend/scripts/.devnet-authority.json
+
+# Local generated artifacts
+backend/generated/
+
+# Firebase config (contains API keys)
+**/google-services.json
+
+# Logs
+*.log
+npm-debug.log*

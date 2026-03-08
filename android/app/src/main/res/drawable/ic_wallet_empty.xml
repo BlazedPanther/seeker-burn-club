@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Wallet body -->
+    <path
+        android:pathData="M3,6C3,4.9 3.9,4 5,4L19,4C20.1,4 21,4.9 21,6L21,18C21,19.1 20.1,20 19,20L5,20C3.9,20 3,19.1 3,18L3,6Z"
+        android:fillColor="#52525B"/>
+    <!-- Flap -->
+    <path
+        android:pathData="M3,6C3,4.9 3.9,4 5,4L19,4C20.1,4 21,4.9 21,6L21,8L3,8L3,6Z"
+        android:fillColor="#3F3F46"/>
+    <!-- Clasp circle -->
+    <path
+        android:pathData="M18,13C18,14.1 17.1,15 16,15C14.9,15 14,14.1 14,13C14,11.9 14.9,11 16,11C17.1,11 18,11.9 18,13Z"
+        android:fillColor="#A1A1AA"/>
+    <!-- Empty indicator - down arrow -->
+    <path
+        android:pathData="M8,12L8,16M8,16L6,14M8,16L10,14"
+        android:strokeColor="#EF4444"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+</vector>

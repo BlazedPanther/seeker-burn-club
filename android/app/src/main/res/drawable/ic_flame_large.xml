@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Outer flame -->
+    <path
+        android:pathData="M24,4C24,4 13,18 13,27C13,33.08 17.92,38 24,38C30.08,38 35,33.08 35,27C35,18 24,4 24,4Z"
+        android:fillColor="#FF6B35"/>
+    <!-- Inner glow -->
+    <path
+        android:pathData="M24,38C20.69,38 18,35.31 18,32C18,27 24,20 24,20C24,20 30,27 30,32C30,35.31 27.31,38 24,38Z"
+        android:fillColor="#FFAB40"/>
+    <!-- Core highlight -->
+    <path
+        android:pathData="M24,38C22.34,38 21,36.66 21,35C21,32.5 24,28 24,28C24,28 27,32.5 27,35C27,36.66 25.66,38 24,38Z"
+        android:fillColor="#FFC107"/>
+</vector>

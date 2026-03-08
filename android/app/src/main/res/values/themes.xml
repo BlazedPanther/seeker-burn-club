@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base app theme (used for Activity window before Compose takes over) -->
+    <style name="Theme.SeekerBurnClub" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorBackground">#121212</item>
+        <item name="android:statusBarColor">#121212</item>
+        <item name="android:navigationBarColor">#121212</item>
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+
+    <!-- Splash screen theme (SplashScreen API) -->
+    <style name="Theme.SeekerBurnClub.Splash" parent="Theme.SeekerBurnClub">
+        <item name="android:windowSplashScreenBackground">#121212</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#1E1E1E</item>
+    </style>
+
+</resources>

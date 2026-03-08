@@ -1,0 +1,25 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Ticket body top -->
+    <path
+        android:pathData="M4,4L20,4C20.55,4 21,4.45 21,5L21,10C19.9,10 19,10.9 19,12C19,13.1 19.9,14 21,14L21,19C21,19.55 20.55,20 20,20L4,20C3.45,20 3,19.55 3,19L3,14C4.1,14 5,13.1 5,12C5,10.9 4.1,10 3,10L3,5C3,4.45 3.45,4 4,4Z"
+        android:fillColor="#FF6B35"/>
+    <!-- Dash line -->
+    <path
+        android:pathData="M9,5L9,7M9,9L9,11M9,13L9,15M9,17L9,19"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"/>
+    <!-- Star on left -->
+    <path
+        android:pathData="M6,12L6.5,10.5L7,12L6.5,13.5Z"
+        android:fillColor="#FFFFFF"/>
+    <!-- Text lines (right side) -->
+    <path android:pathData="M12,9L18,9" android:strokeColor="#FFFFFF" android:strokeWidth="1.2" android:fillColor="#00000000" android:strokeLineCap="round"/>
+    <path android:pathData="M12,12L17,12" android:strokeColor="#FFFFFF" android:strokeWidth="1.2" android:fillColor="#00000000" android:strokeLineCap="round" android:strokeAlpha="0.7"/>
+    <path android:pathData="M12,15L16,15" android:strokeColor="#FFFFFF" android:strokeWidth="1.2" android:fillColor="#00000000" android:strokeLineCap="round" android:strokeAlpha="0.5"/>
+</vector>

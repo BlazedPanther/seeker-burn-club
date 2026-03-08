@@ -1,0 +1,61 @@
+{
+  "sampleSize": 5000,
+  "badgePolicies": {
+    "BURN_100": {
+      "common": { "min": 2.0, "max": 8.0 },
+      "uncommon": { "min": 42.0, "max": 56.0 },
+      "rare": { "min": 32.0, "max": 48.0 },
+      "epic": { "min": 2.0, "max": 10.0 },
+      "legendary": { "min": 0.0, "max": 1.0 },
+      "mythic": { "min": 0.0, "max": 0.2 }
+    },
+    "BURN_2500": {
+      "common": { "min": 0.0, "max": 2.0 },
+      "uncommon": { "min": 10.0, "max": 25.0 },
+      "rare": { "min": 60.0, "max": 80.0 },
+      "epic": { "min": 5.0, "max": 20.0 },
+      "legendary": { "min": 0.0, "max": 2.0 },
+      "mythic": { "min": 0.0, "max": 0.2 }
+    },
+    "BURN_10000": {
+      "common": { "min": 0.0, "max": 1.0 },
+      "uncommon": { "min": 5.0, "max": 18.0 },
+      "rare": { "min": 22.0, "max": 42.0 },
+      "epic": { "min": 45.0, "max": 70.0 },
+      "legendary": { "min": 0.0, "max": 4.0 },
+      "mythic": { "min": 0.0, "max": 1.0 }
+    },
+    "BURN_25000": {
+      "common": { "min": 0.0, "max": 1.0 },
+      "uncommon": { "min": 5.0, "max": 15.0 },
+      "rare": { "min": 30.0, "max": 52.0 },
+      "epic": { "min": 10.0, "max": 30.0 },
+      "legendary": { "min": 20.0, "max": 40.0 },
+      "mythic": { "min": 0.0, "max": 1.0 }
+    },
+    "BURN_100000": {
+      "common": { "min": 0.0, "max": 0.5 },
+      "uncommon": { "min": 1.0, "max": 8.0 },
+      "rare": { "min": 30.0, "max": 52.0 },
+      "epic": { "min": 20.0, "max": 45.0 },
+      "legendary": { "min": 1.0, "max": 10.0 },
+      "mythic": { "min": 8.0, "max": 22.0 }
+    },
+    "STREAK_1000": {
+      "common": { "min": 0.0, "max": 1.0 },
+      "uncommon": { "min": 5.0, "max": 18.0 },
+      "rare": { "min": 30.0, "max": 55.0 },
+      "epic": { "min": 10.0, "max": 30.0 },
+      "legendary": { "min": 18.0, "max": 35.0 },
+      "mythic": { "min": 0.0, "max": 1.0 }
+    },
+    "STREAK_1500": {
+      "common": { "min": 0.0, "max": 0.5 },
+      "uncommon": { "min": 2.0, "max": 12.0 },
+      "rare": { "min": 28.0, "max": 52.0 },
+      "epic": { "min": 20.0, "max": 42.0 },
+      "legendary": { "min": 1.0, "max": 10.0 },
+      "mythic": { "min": 10.0, "max": 25.0 }
+    }
+  }
+}
