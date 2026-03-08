@@ -52,7 +52,7 @@ npm run typecheck
 npm run lint
 npm run generate:creatures
 npm run audit:rarity
-npm run audit:daily
+npm run audit:prod
 Pop-Location
 ```
 
@@ -130,33 +130,6 @@ Code-backed safeguards currently implemented:
 - `/health` endpoint checks both Postgres and Redis in `backend/src/server.ts`.
 - Android preflight checks include treasury ATA derivation and frozen-account detection.
 - Android release client enforces certificate pinning configuration at startup.
-
-## Daily Audit Automation
-
-Workflow: `.github/workflows/daily-audit-report.yml`
-
-- Schedule: `23:55 UTC` daily
-- Manual trigger: GitHub Actions -> `Daily Audit Report` -> `Run workflow`
-- Output artifacts:
-  - `backend/generated/reports/daily-audit-YYYY-MM-DD.json`
-  - `backend/generated/reports/daily-audit-summary.csv`
-
-Required GitHub secrets:
-
-- `DATABASE_URL`
-- `SOLANA_RPC_URL`
-- `TREASURY_SKR_ATA`
-- `TREASURY_WALLET`
-- `SKR_MINT`
-- `CREATOR_FEE_LAMPORTS`
-
-Optional Discord notifications:
-
-- `DISCORD_WEBHOOK_URL`
-- `DISCORD_ROLE_MENTION`
-- `DISCORD_USERNAME`
-
-If `DISCORD_WEBHOOK_URL` is set, the workflow posts a KPI summary to Discord.
 
 ## CI Baseline
 
