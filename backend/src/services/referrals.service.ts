@@ -333,22 +333,31 @@ export async function getReferralHistory(walletAddress: string) {
     LIMIT 100
   `);
 
+  const toIsoOrNull = (value: unknown): string | null => {
+    if (value == null) return null;
+    if (value instanceof Date) return value.toISOString();
+
+    const parsed = new Date(String(value));
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  };
+
   return rows.map((row: unknown) => {
     const r = row as {
       id: string;
       referee_wallet: string;
       status: string;
       rejection_reason: string | null;
-      created_at: Date;
-      qualified_at: Date | null;
+      created_at: Date | string;
+      qualified_at: Date | string | null;
     };
+    const createdAt = toIsoOrNull(r.created_at);
     return {
       id: r.id,
       refereeWallet: r.referee_wallet,
       status: r.status,
       rejectionReason: r.rejection_reason,
-      createdAt: r.created_at.toISOString(),
-      qualifiedAt: r.qualified_at ? r.qualified_at.toISOString() : null,
+      createdAt: createdAt ?? new Date(0).toISOString(),
+      qualifiedAt: toIsoOrNull(r.qualified_at),
     };
   });
 }
