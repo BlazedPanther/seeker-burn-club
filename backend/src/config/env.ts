@@ -1,6 +1,15 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+const envBoolean = (defaultValue: boolean) => z.preprocess((value) => {
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(normalized)) return false;
+  }
+  return value;
+}, z.boolean()).default(defaultValue);
+
 const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default('0.0.0.0'),
@@ -35,7 +44,7 @@ const envSchema = z.object({
   // Metaplex
   BADGE_COLLECTION_MINT: z.string().optional(),
   MINT_AUTHORITY_SECRET_KEY: z.string().optional(),
-  MINTING_ENABLED: z.coerce.boolean().default(true),
+  MINTING_ENABLED: envBoolean(true),
 
   // Creator fee (lamports) — charged to user during NFT mint, sent to TREASURY_WALLET
   CREATOR_FEE_LAMPORTS: z.coerce.number().min(0).default(5_000_000), // 0.005 SOL
@@ -44,7 +53,7 @@ const envSchema = z.object({
   REFERRAL_APPLY_WINDOW_DAYS: z.coerce.number().min(1).max(60).default(14),
   REFERRAL_QUALIFY_BURN_DAYS: z.coerce.number().min(1).max(30).default(3),
   REFERRAL_QUALIFY_LIFETIME_SKR: z.coerce.number().min(1).default(100),
-  REFERRAL_ENFORCE_SYBIL_CHECKS: z.coerce.boolean().default(true),
+  REFERRAL_ENFORCE_SYBIL_CHECKS: envBoolean(true),
 });
 
 export const env = envSchema.parse(process.env);
