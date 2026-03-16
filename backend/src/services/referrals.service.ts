@@ -95,6 +95,7 @@ export async function applyReferralCode(
   ipAddress: string | undefined,
 ): Promise<{ status: 'PENDING' | 'QUALIFIED'; referrerWallet: string }> {
   const code = normalizeCode(codeInput);
+  const enforceSybilChecks = env.NODE_ENV === 'production' || env.REFERRAL_ENFORCE_SYBIL_CHECKS;
 
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${refereeWallet}))`);
@@ -122,7 +123,7 @@ export async function applyReferralCode(
     if (referrer.id === referee.id) throw new Error('REFERRAL_SELF_NOT_ALLOWED');
 
     // Sybil protection 1: same device fingerprint between source and target user.
-    if (deviceFingerprint && referrer.deviceFingerprint && referrer.deviceFingerprint === deviceFingerprint) {
+    if (enforceSybilChecks && deviceFingerprint && referrer.deviceFingerprint && referrer.deviceFingerprint === deviceFingerprint) {
       await tx.insert(referrals).values({
         referrerUserId: referrer.id,
         refereeUserId: referee.id,
@@ -143,7 +144,7 @@ export async function applyReferralCode(
     }
 
     // Sybil protection 2: historical shared IP across auth sessions.
-    if (await hasSharedIp(referrer.walletAddress, refereeWallet)) {
+    if (enforceSybilChecks && await hasSharedIp(referrer.walletAddress, refereeWallet)) {
       await tx.insert(referrals).values({
         referrerUserId: referrer.id,
         refereeUserId: referee.id,

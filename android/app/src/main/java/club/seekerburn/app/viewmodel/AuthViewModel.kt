@@ -57,11 +57,8 @@ class AuthViewModel @Inject constructor(
 
                 _state.value = AuthState.Verifying
 
-                // Step 4: Verify with backend
-                // Hash the device fingerprint to fit within DB VARCHAR constraints
-                val fingerprintHash = java.security.MessageDigest.getInstance("SHA-256")
-                    .digest(android.os.Build.FINGERPRINT.toByteArray())
-                    .joinToString("") { "%02x".format(it) }
+                // Step 4: Verify with backend using a stable install-scoped fingerprint
+                val fingerprintHash = sessionStore.getDeviceFingerprintHash()
 
                 val verifyResponse = api.verifyAuth(
                     AuthVerifyRequest(

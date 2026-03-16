@@ -44,6 +44,7 @@ const envSchema = z.object({
   REFERRAL_APPLY_WINDOW_DAYS: z.coerce.number().min(1).max(60).default(14),
   REFERRAL_QUALIFY_BURN_DAYS: z.coerce.number().min(1).max(30).default(3),
   REFERRAL_QUALIFY_LIFETIME_SKR: z.coerce.number().min(1).default(100),
+  REFERRAL_ENFORCE_SYBIL_CHECKS: z.coerce.boolean().default(true),
 });
 
 export const env = envSchema.parse(process.env);

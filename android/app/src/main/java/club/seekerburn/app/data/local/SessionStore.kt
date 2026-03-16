@@ -2,6 +2,8 @@ package club.seekerburn.app.data.local
 
 import android.content.Context
 import android.content.SharedPreferences
+import java.security.MessageDigest
+import java.util.UUID
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -21,6 +23,10 @@ private val Context.dataStore by preferencesDataStore(name = "seeker_burn_sessio
 class SessionStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private companion object {
+        const val KEY_DEVICE_INSTALL_ID = "device_install_id"
+    }
+
     // Encrypted storage for sensitive auth data
     private val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -52,6 +58,26 @@ class SessionStore @Inject constructor(
 
     fun getAuthToken(): String? = encryptedPrefs.getString("auth_token", null)
     fun getWalletAddress(): String? = encryptedPrefs.getString("wallet_address", null)
+
+    /**
+     * Returns a stable, install-scoped identifier stored in encrypted prefs.
+     * This avoids using Build.FINGERPRINT, which is not unique per device/user.
+     */
+    fun getOrCreateInstallId(): String {
+        val existing = encryptedPrefs.getString(KEY_DEVICE_INSTALL_ID, null)
+        if (!existing.isNullOrBlank()) return existing
+
+        val generated = UUID.randomUUID().toString()
+        encryptedPrefs.edit().putString(KEY_DEVICE_INSTALL_ID, generated).commit()
+        return generated
+    }
+
+    fun getDeviceFingerprintHash(): String {
+        val installId = getOrCreateInstallId()
+        return MessageDigest.getInstance("SHA-256")
+            .digest(installId.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+    }
 
     fun getAuthTokenExpiry(): String? = encryptedPrefs.getString("auth_token_expiry", null)
 

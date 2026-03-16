@@ -1,4 +1,5 @@
 #!/usr/bin/env npx tsx
+/// <reference types="node" />
 /**
  * Burn Spirit Creature Batch Generator
  * Generates animated pixel-art NFT creatures (GIF) using the main creature engine.
