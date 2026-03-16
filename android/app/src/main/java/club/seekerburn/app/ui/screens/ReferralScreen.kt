@@ -190,6 +190,19 @@ fun ReferralScreen(
                     StatChip("Rejected", overview.stats.rejected.toString(), Modifier.weight(1f))
                 }
 
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(color = colors.surfaceElevated2) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                        Text("How Qualification Works", color = colors.textPrimary, style = MaterialTheme.typography.titleSmall)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("1. Share your referral code with a new user.", color = colors.textSecondary, style = MaterialTheme.typography.bodySmall)
+                        Text("2. They apply it within 14 days of account creation.", color = colors.textSecondary, style = MaterialTheme.typography.bodySmall)
+                        Text("3. Referral qualifies after 3 burn days and 100+ lifetime SKR burned.", color = colors.textSecondary, style = MaterialTheme.typography.bodySmall)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("Anti-abuse checks are active (self-referral, same-device, shared-IP patterns).", color = colors.textTertiary, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
                 overview.referredBy?.let { info ->
                     Spacer(modifier = Modifier.height(12.dp))
                     Surface(color = colors.surfaceElevated2) {
