@@ -95,7 +95,7 @@ export async function applyReferralCode(
   ipAddress: string | undefined,
 ): Promise<{ status: 'PENDING' | 'QUALIFIED'; referrerWallet: string }> {
   const code = normalizeCode(codeInput);
-  const enforceSybilChecks = env.NODE_ENV === 'production' || env.REFERRAL_ENFORCE_SYBIL_CHECKS;
+  const enforceSybilChecks = env.REFERRAL_ENFORCE_SYBIL_CHECKS;
 
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${refereeWallet}))`);
