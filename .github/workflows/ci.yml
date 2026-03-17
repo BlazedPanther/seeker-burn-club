@@ -35,6 +35,13 @@ jobs:
         run: npm run typecheck
 
       - name: Test
+        env:
+          DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+          SOLANA_RPC_URL: https://api.devnet.solana.com
+          SKR_MINT: CyHB1R1isTShErodMLCWCeXHTQC9SkVqJDG1Ezzk83GM
+          TREASURY_WALLET: nP25k2QNCiGKwQLyYvuLhKpbRukN7n7qQtbbcEm4Te5
+          TREASURY_SKR_ATA: Pn6FkEHtDqA8RDxJEgkjxUozLjn2weLX58bVS2aWUPD
+          JWT_SECRET: ci-test-jwt-secret-at-least-32-chars-long
         run: npm run test
 
       - name: Rarity Audit
