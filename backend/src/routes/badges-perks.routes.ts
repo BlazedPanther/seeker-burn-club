@@ -398,12 +398,9 @@ export async function badgesRoutes(fastify: FastifyInstance) {
         return reply.code(200).send({ success: true, nftMintAddress: badge.nftMintAddress });
       }
 
-      // Verify a claim was prepared
+      // Verify a claim was prepared (skip expiry check — if payment is verified, always honor it)
       if (!badge.pendingClaimMint) {
         return reply.code(400).send({ error: 'NO_PENDING_CLAIM', message: 'Call /claim/prepare first.' });
-      }
-      if (badge.pendingClaimExpiresAt && new Date() > new Date(badge.pendingClaimExpiresAt)) {
-        return reply.code(400).send({ error: 'CLAIM_EXPIRED', message: 'Prepared claim has expired. Call /claim/prepare again.' });
       }
 
       // Verify the transaction is confirmed on-chain (retry with linear backoff, ~56s max)
@@ -459,6 +456,12 @@ export async function badgesRoutes(fastify: FastifyInstance) {
       }
 
       // ── Server-side NFT mint: create mint, ATA, token, metadata, master edition ──
+      // Store the payment tx signature first so we can track/recover if mint fails
+      await db
+        .update(badges)
+        .set({ nftTxSignature: txSignature, nftMintStatus: 'MINTING' })
+        .where(and(eq(badges.walletAddress, wallet), eq(badges.badgeId, badgeId)));
+
       const seedSalt = badge.nftSeedSalt ?? undefined;
       let mintResult: { mintPublicKey: string; txSignature: string };
       try {
