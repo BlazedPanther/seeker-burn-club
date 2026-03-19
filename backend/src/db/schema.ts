@@ -121,6 +121,8 @@ export const badges = pgTable('badges', {
   nftTxSignature: varchar('nft_tx_signature', { length: 88 }),
   nftMintStatus: varchar('nft_mint_status', { length: 20 }).default('PENDING'),
   nftSeedSalt: varchar('nft_seed_salt', { length: 64 }),
+  nftMintStartedAt: timestamp('nft_mint_started_at', { withTimezone: true }),
+  nftMintFailureReason: text('nft_mint_failure_reason'),
   pendingClaimMint: varchar('pending_claim_mint', { length: 44 }),
   pendingClaimExpiresAt: timestamp('pending_claim_expires_at', { withTimezone: true }),
   earnedAt: timestamp('earned_at', { withTimezone: true }).notNull().defaultNow(),

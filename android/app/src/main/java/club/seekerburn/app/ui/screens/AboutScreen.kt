@@ -149,6 +149,10 @@ fun AboutScreen(
                         onOpenUrl("https://www.seekerburnclub.xyz/impressum/")
                     }
                     HorizontalDivider(color = colors.divider)
+                    AboutLinkRow("Discord", "Community") {
+                        onOpenUrl("https://discord.gg/kAJDVkd6Gp")
+                    }
+                    HorizontalDivider(color = colors.divider)
                     AboutLinkRow("X / Twitter", "@seekerburnclub") {
                         onOpenUrl("https://x.com/seekerburnclub")
                     }

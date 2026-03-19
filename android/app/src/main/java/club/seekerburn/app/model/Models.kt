@@ -118,6 +118,7 @@ data class BadgeEarned(
     val earnedAt: String? = null,
     val nftMintAddress: String? = null,
     val nftMintStatus: String? = null,
+    val nftTxSignature: String? = null,
 )
 
 // NFT self-mint claim flow
@@ -138,6 +139,15 @@ data class BadgeClaimConfirmRequest(
 data class BadgeClaimConfirmResponse(
     val success: Boolean,
     val nftMintAddress: String? = null,
+    val status: String? = null,
+)
+
+@Serializable
+data class BadgeClaimStatusResponse(
+    val status: String,
+    val nftMintAddress: String? = null,
+    val reason: String? = null,
+    val nftTxSignature: String? = null,
 )
 
 data class BadgeDefinition(

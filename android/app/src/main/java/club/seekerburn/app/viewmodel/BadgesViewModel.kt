@@ -7,6 +7,7 @@ import club.seekerburn.app.data.solana.WalletAdapterService
 import club.seekerburn.app.model.BadgeClaimConfirmRequest
 import club.seekerburn.app.model.BadgeClaimConfirmResponse
 import club.seekerburn.app.model.BadgeClaimPrepareResponse
+import club.seekerburn.app.model.BadgeClaimStatusResponse
 import club.seekerburn.app.model.BadgeDefinition
 import club.seekerburn.app.model.BadgeEarned
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
@@ -57,6 +58,10 @@ class BadgesViewModel @Inject constructor(
         BadgeClaimConfirmRequest(txSignature = txSignature, mintPublicKey = mintPublicKey),
     )
 
+    /** Step 3b: Poll for mint completion after async confirm. */
+    suspend fun getClaimStatus(badgeId: String): BadgeClaimStatusResponse =
+        api.getClaimStatus(badgeId)
+
     private fun loadBadges() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
@@ -73,6 +78,7 @@ class BadgesViewModel @Inject constructor(
                         earnedAt = earned?.earnedAt,
                         nftMintAddress = earned?.nftMintAddress,
                         nftMintStatus = earned?.nftMintStatus,
+                        nftTxSignature = earned?.nftTxSignature,
                     )
                 }
 
@@ -96,6 +102,7 @@ data class BadgeItem(
     val earnedAt: String?,
     val nftMintAddress: String?,
     val nftMintStatus: String?,  // "PENDING" | "COMPLETED" | "FAILED" | null
+    val nftTxSignature: String? = null,
 )
 
 data class BadgesUiState(

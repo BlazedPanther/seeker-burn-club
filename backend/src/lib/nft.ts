@@ -4,16 +4,20 @@
  * Uses only @solana/web3.js + internal SPL token helpers (no extra Metaplex dependencies).
  * Manually constructs Metaplex Token Metadata Program instructions via Borsh encoding.
  *
- * Two-phase flow:
- * 1. User signs a simple SOL transfer (creator fee) — wallet simulates it perfectly.
- * 2. Server mints the full NFT after confirming payment (create mint, ATA, metadata, master edition).
+ * Single-transaction user-pays-all flow:
+ * The server builds the complete mint transaction with the user as fee payer
+ * (pays rent, tx fees, and creator fee). The server partially signs with the
+ * mint authority and deterministic mint keypair. The user's wallet (MWA) adds
+ * the final signature and broadcasts. The mint authority holds 0 SOL.
  *
  * Requires env vars:
  *   MINT_AUTHORITY_SECRET_KEY  — base58 or JSON-array of the authority keypair
  *   BACKEND_URL                — used to build the off-chain metadata URI
  */
 
+import crypto from 'node:crypto';
 import {
+  Connection,
   Keypair,
   PublicKey,
   Transaction,
@@ -33,6 +37,12 @@ import {
   getAssociatedTokenAddressSync,
 } from './spl-token-compat.js';
 import { connection } from './solana.js';
+
+/** Dedicated connection for mint transactions — no short fetch timeout. */
+const mintConnection = new Connection(env.SOLANA_RPC_URL, {
+  commitment: 'confirmed',
+  confirmTransactionInitialTimeout: 180_000,
+});
 import { getBadgeById } from './badges.js';
 import { creatureSeed, resolveTraits, generateCreatureName } from './creature.js';
 import { uploadCreatureAssets } from './storage.js';
@@ -146,42 +156,74 @@ function getMintAuthority(): Keypair {
   return cachedAuthority;
 }
 
+/** Derive a deterministic Keypair from (wallet, badgeId, seedSalt). */
+function deriveMintKeypair(ownerWallet: string, badgeId: string, seedSalt?: string): Keypair {
+  const hash = crypto.createHash('sha256')
+    .update(`${ownerWallet}:${badgeId}:${seedSalt ?? ''}`)
+    .digest();
+  return Keypair.fromSeed(hash.subarray(0, 32));
+}
+
+/**
+ * Get the deterministic mint public key for a (wallet, badgeId, seedSalt) tuple.
+ */
+export function getDeterministicMintPublicKey(
+  ownerWallet: string, badgeId: string, seedSalt?: string,
+): string {
+  return deriveMintKeypair(ownerWallet, badgeId, seedSalt).publicKey.toBase58();
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export interface BadgeClaimTx {
-  /** Base64-encoded transaction — a simple SOL transfer (1 signer: user). */
+  /** Base64-encoded partially-signed VersionedTransaction (3 signers: user + authority + mint). */
   serializedTx: string;
-  /** Placeholder — actual mint is created server-side after payment confirms. */
+  /** Deterministic mint address for this badge NFT. */
   mintPublicKey: string;
 }
 
 
 /**
- * Build a simple SOL-transfer payment transaction for claiming an NFT badge.
+ * Build the complete NFT mint transaction as a partially-signed VersionedTransaction.
  *
- * The user's transaction is ONLY a SOL transfer to the treasury.
- * This makes the transaction fully simulatable by the Seeker / Seed Vault wallet
- * (1 signer, standard SystemProgram instructions → no "couldn't be simulated" warning).
+ * The USER is the fee payer — pays all rent, tx fees, and creator fee.
+ * The SERVER partially signs with the mint authority + deterministic mint keypair.
+ * The client (MWA) adds the user's signature and broadcasts the transaction.
  *
- * After the user's payment is confirmed, the server mints the NFT entirely server-side
- * via mintBadgeNft().
+ * This eliminates the need for the mint authority to hold any SOL.
  */
 export async function buildBadgeClaimTransaction(
   ownerWalletAddress: string,
-  _badgeId: string,
-  _seedSalt?: string,
+  badgeId: string,
+  seedSalt?: string,
 ): Promise<BadgeClaimTx> {
+  const authority = getMintAuthority();
   const owner = new PublicKey(ownerWalletAddress);
+  const mintKeypair = deriveMintKeypair(ownerWalletAddress, badgeId, seedSalt);
 
-  const { blockhash } = await connection.getLatestBlockhash('confirmed');
+  // Parallel RPC calls + asset resolution
+  const [mintRent, { blockhash }, assets] = await Promise.all([
+    connection.getMinimumBalanceForRentExemption(MINT_SIZE),
+    connection.getLatestBlockhash('confirmed'),
+    uploadCreatureAssets(ownerWalletAddress, badgeId, seedSalt),
+  ]);
+
+  const seed = creatureSeed(ownerWalletAddress, badgeId, seedSalt);
+  const creatureName = generateCreatureName(seed);
+  const collectionMint = env.BADGE_COLLECTION_MINT
+    ? new PublicKey(env.BADGE_COLLECTION_MINT)
+    : undefined;
+  const ownerAta = getAssociatedTokenAddressSync(mintKeypair.publicKey, owner);
+  const metadataPDA = findMetadataPDA(mintKeypair.publicKey);
+  const masterEditionPDA = findMasterEditionPDA(mintKeypair.publicKey);
 
   const instructions: TransactionInstruction[] = [];
 
-  // Compute budget for priority fee display in wallet
-  instructions.push(ComputeBudgetProgram.setComputeUnitLimit({ units: 10_000 }));
+  // Compute budget — enough for metadata + master edition creation
+  instructions.push(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
   instructions.push(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }));
 
-  // Creator fee → treasury (the only real instruction)
+  // Creator fee → treasury
   if (env.CREATOR_FEE_LAMPORTS > 0) {
     instructions.push(SystemProgram.transfer({
       fromPubkey: owner,
@@ -190,7 +232,70 @@ export async function buildBadgeClaimTransaction(
     }));
   }
 
-  // Build v0 VersionedTransaction — single signer (user), fully simulatable
+  // Create mint account (user pays rent)
+  instructions.push(SystemProgram.createAccount({
+    fromPubkey: owner,
+    newAccountPubkey: mintKeypair.publicKey,
+    lamports: mintRent,
+    space: MINT_SIZE,
+    programId: TOKEN_PROGRAM_ID,
+  }));
+
+  // Initialize mint (0 decimals, authority as mint + freeze authority)
+  instructions.push(createInitializeMintInstruction(
+    mintKeypair.publicKey, 0, authority.publicKey, authority.publicKey,
+  ));
+
+  // Create owner's ATA (user pays rent)
+  instructions.push(createAssociatedTokenAccountInstruction(
+    owner, ownerAta, owner, mintKeypair.publicKey,
+  ));
+
+  // Mint 1 token to owner's ATA
+  instructions.push(createMintToInstruction(
+    mintKeypair.publicKey, ownerAta, authority.publicKey, 1,
+  ));
+
+  // CreateMetadataAccountV3 — user is payer, authority is mintAuth + updateAuth
+  instructions.push(new TransactionInstruction({
+    programId: TOKEN_METADATA_PROGRAM_ID,
+    keys: [
+      { pubkey: metadataPDA,             isSigner: false, isWritable: true  },
+      { pubkey: mintKeypair.publicKey,   isSigner: false, isWritable: false },
+      { pubkey: authority.publicKey,     isSigner: true,  isWritable: false }, // mintAuthority
+      { pubkey: owner,                   isSigner: true,  isWritable: true  }, // payer (USER)
+      { pubkey: authority.publicKey,     isSigner: false, isWritable: false }, // updateAuthority
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY,      isSigner: false, isWritable: false },
+    ],
+    data: encodeCreateMetadataAccountV3({
+      name: creatureName,
+      symbol: 'BURNSPIRIT',
+      uri: assets.metadataUrl,
+      sellerFeeBasisPoints: 0,
+      isMutable: true,
+      collectionMint,
+    }),
+  }));
+
+  // CreateMasterEditionV3 — user is payer
+  instructions.push(new TransactionInstruction({
+    programId: TOKEN_METADATA_PROGRAM_ID,
+    keys: [
+      { pubkey: masterEditionPDA,        isSigner: false, isWritable: true  },
+      { pubkey: mintKeypair.publicKey,    isSigner: false, isWritable: true  },
+      { pubkey: authority.publicKey,     isSigner: true,  isWritable: false }, // updateAuthority
+      { pubkey: authority.publicKey,     isSigner: true,  isWritable: false }, // mintAuthority
+      { pubkey: owner,                   isSigner: true,  isWritable: true  }, // payer (USER)
+      { pubkey: metadataPDA,             isSigner: false, isWritable: true  },
+      { pubkey: TOKEN_PROGRAM_ID,        isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY,      isSigner: false, isWritable: false },
+    ],
+    data: encodeCreateMasterEditionV3(),
+  }));
+
+  // Compile to V0 message with user as fee payer
   const messageV0 = new TransactionMessage({
     payerKey: owner,
     recentBlockhash: blockhash,
@@ -198,13 +303,12 @@ export async function buildBadgeClaimTransaction(
   }).compileToV0Message();
 
   const vtx = new VersionedTransaction(messageV0);
-  // No server signatures needed — user is the only signer
+  // Server partially signs — MWA adds the user's signature (index 0)
+  vtx.sign([authority, mintKeypair]);
 
-  const serialized = vtx.serialize();
   return {
-    serializedTx: Buffer.from(serialized).toString('base64'),
-    // Actual mint is generated server-side; this is a placeholder for API compat
-    mintPublicKey: 'pending_server_mint',
+    serializedTx: Buffer.from(vtx.serialize()).toString('base64'),
+    mintPublicKey: mintKeypair.publicKey.toBase58(),
   };
 }
 
@@ -222,7 +326,21 @@ export async function mintBadgeNft(
 ): Promise<{ mintPublicKey: string; txSignature: string }> {
   const authority = getMintAuthority();
   const owner = new PublicKey(ownerWallet);
-  const mintKeypair = Keypair.generate();
+
+  // Deterministic mint keypair: same wallet+badge+salt always yields the same keypair.
+  const mintKeypair = deriveMintKeypair(ownerWallet, badgeId, seedSalt);
+
+  // ── Idempotency: if the deterministic mint already exists on-chain (prior
+  //    attempt succeeded but confirmTransaction timed out), return immediately.
+  //    This prevents false MINT_FAILED and duplicate createAccount errors.
+  const existingAccount = await mintConnection.getAccountInfo(mintKeypair.publicKey).catch(() => null);
+  if (existingAccount && existingAccount.owner.equals(TOKEN_PROGRAM_ID)) {
+    console.log(`[mintBadgeNft] Deterministic mint ${mintKeypair.publicKey.toBase58()} already exists on-chain — returning existing`);
+    return {
+      mintPublicKey: mintKeypair.publicKey.toBase58(),
+      txSignature: 'already_minted_on_chain',
+    };
+  }
 
   // Creature metadata (deterministic from wallet + badgeId + seedSalt)
   const assets = await uploadCreatureAssets(ownerWallet, badgeId, seedSalt);
@@ -244,14 +362,14 @@ export async function mintBadgeNft(
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      const { blockhash, lastValidBlockHeight } = await mintConnection.getLatestBlockhash('confirmed');
 
       const tx = new Transaction();
       tx.feePayer = authority.publicKey;
       tx.recentBlockhash = blockhash;
 
   tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
-  tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }));
+  tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000_000 }));
 
   // 1. Create mint account (authority pays rent)
   tx.add(SystemProgram.createAccount({
@@ -326,11 +444,11 @@ export async function mintBadgeNft(
   }));
 
   tx.sign(authority, mintKeypair);
-      const sig = await connection.sendRawTransaction(tx.serialize(), {
+      const sig = await mintConnection.sendRawTransaction(tx.serialize(), {
         skipPreflight: true,
-        maxRetries: 3,
+        maxRetries: 5,
       });
-      await connection.confirmTransaction(
+      await mintConnection.confirmTransaction(
         { signature: sig, blockhash, lastValidBlockHeight },
         'confirmed',
       );
@@ -342,6 +460,20 @@ export async function mintBadgeNft(
     } catch (err) {
       lastError = err;
       console.error(`[mintBadgeNft] attempt ${attempt}/${MAX_ATTEMPTS} failed:`, err);
+
+      // After a failed confirm, check if the tx actually landed on-chain.
+      // confirmTransaction can timeout even when the tx was processed.
+      try {
+        const postErrorAccount = await mintConnection.getAccountInfo(mintKeypair.publicKey);
+        if (postErrorAccount && postErrorAccount.owner.equals(TOKEN_PROGRAM_ID)) {
+          console.log(`[mintBadgeNft] Mint account exists on-chain despite error — treating as success`);
+          return {
+            mintPublicKey: mintKeypair.publicKey.toBase58(),
+            txSignature: 'confirmed_after_timeout',
+          };
+        }
+      } catch { /* RPC check failed — continue with retry */ }
+
       if (attempt < MAX_ATTEMPTS) {
         await new Promise(r => setTimeout(r, 2000 * attempt));
       }
@@ -398,6 +530,26 @@ export async function verifyCollectionMembership(mintPublicKey: string): Promise
     console.error('[verifyCollectionMembership] non-fatal error:', err);
     return null;
   }
+}
+
+/**
+ * Check if the deterministic mint for a (wallet, badgeId, seedSalt) tuple
+ * already exists on-chain. Used by the stale-mint recovery job.
+ * Returns the mint public key string if it exists, null otherwise.
+ */
+export async function checkDeterministicMintExists(
+  ownerWallet: string,
+  badgeId: string,
+  seedSalt?: string,
+): Promise<string | null> {
+  const mintKeypair = deriveMintKeypair(ownerWallet, badgeId, seedSalt);
+  try {
+    const accountInfo = await connection.getAccountInfo(mintKeypair.publicKey);
+    if (accountInfo && accountInfo.owner.equals(TOKEN_PROGRAM_ID)) {
+      return mintKeypair.publicKey.toBase58();
+    }
+  } catch { /* RPC error — treat as non-existent */ }
+  return null;
 }
 
 /**

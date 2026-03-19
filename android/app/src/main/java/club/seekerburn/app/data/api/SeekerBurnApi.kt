@@ -34,6 +34,7 @@ interface SeekerBurnApi {
     suspend fun getBadges(): List<BadgeEarned>
     suspend fun prepareBadgeClaim(badgeId: String): BadgeClaimPrepareResponse
     suspend fun confirmBadgeClaim(badgeId: String, request: BadgeClaimConfirmRequest): BadgeClaimConfirmResponse
+    suspend fun getClaimStatus(badgeId: String): BadgeClaimStatusResponse
 
     // Perks
     suspend fun getPerks(): List<Perk>

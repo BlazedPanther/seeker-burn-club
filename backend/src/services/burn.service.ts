@@ -41,7 +41,7 @@ export interface BurnResult {
 export async function fetchTransactionWithRetry(
   signature: string,
   {
-    maxAttempts = 8,
+    maxAttempts = 12,
     baseDelayMs = 2_000,
     commitment = 'confirmed' as const,
   } = {},
@@ -53,8 +53,8 @@ export async function fetchTransactionWithRetry(
     });
     if (tx) return tx;
     if (attempt < maxAttempts - 1) {
-      // Linear back-off: 2 s, 4 s, 6 s … (max total ≈ 56 s)
-      await new Promise(r => setTimeout(r, baseDelayMs * (attempt + 1)));
+      // Capped back-off: 2s, 4s, 6s, 8s, 10s, 10s, 10s… (max total ≈ ~100s)
+      await new Promise(r => setTimeout(r, Math.min(baseDelayMs * (attempt + 1), 10_000)));
     }
   }
   return null;

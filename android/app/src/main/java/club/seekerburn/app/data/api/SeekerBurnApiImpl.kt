@@ -182,6 +182,13 @@ class SeekerBurnApiImpl @Inject constructor(
         }.body()
     }
 
+    override suspend fun getClaimStatus(badgeId: String): BadgeClaimStatusResponse {
+        val token = requireAuthToken()
+        return client.get("/api/v1/badges/$badgeId/claim/status") {
+            bearerAuth(token)
+        }.body()
+    }
+
     // ── Perks ──
 
     override suspend fun getPerks(): List<Perk> {
