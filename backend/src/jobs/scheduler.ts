@@ -3,6 +3,7 @@ import { db } from '../db/client.js';
 import { securityLogs } from '../db/schema.js';
 import { todayUTC, yesterdayUTC } from '../lib/solana.js';
 import { securityLog } from '../lib/security.js';
+import { checkDeterministicMintExists } from '../lib/nft.js';
 import type { FastifyBaseLogger } from 'fastify';
 
 let log: FastifyBaseLogger | Console = console;
@@ -128,6 +129,67 @@ export async function markStaleBurns(): Promise<void> {
 }
 
 /**
+ * Background job: Recover badges stuck in MINTING state.
+ *
+ * Causes: server restart during async mint, unhandled exception in fire-and-forget,
+ * or confirmTransaction timeout where the tx actually landed.
+ *
+ * For each stale badge (MINTING for > 10 minutes):
+ *   1. Check on-chain whether the deterministic mint account exists.
+ *   2. If yes → mark COMPLETED (NFT minted, DB just didn't record it).
+ *   3. If no  → mark MINT_FAILED with reason so user can retry.
+ */
+export async function recoverStaleMints(): Promise<void> {
+  const staleRows = await db.execute(sql`
+    SELECT id, wallet_address, badge_id, nft_seed_salt, nft_tx_signature
+    FROM badges
+    WHERE nft_mint_status = 'MINTING'
+      AND nft_mint_started_at < NOW() - INTERVAL '10 minutes'
+  `);
+
+  const rows = Array.isArray(staleRows) ? staleRows as Record<string, unknown>[] : [];
+  if (rows.length === 0) return;
+
+  log.info(`[Job] Found ${rows.length} stale MINTING badge(s) — recovering`);
+
+  for (const row of rows) {
+    const id = row.id as string;
+    const wallet = row.wallet_address as string;
+    const badgeId = row.badge_id as string;
+    const seedSalt = (row.nft_seed_salt as string) ?? undefined;
+
+    try {
+      const existingMint = await checkDeterministicMintExists(wallet, badgeId, seedSalt);
+
+      if (existingMint) {
+        // NFT exists on-chain — prior mint succeeded but DB wasn't updated
+        await db.execute(sql`
+          UPDATE badges
+          SET nft_mint_status = 'COMPLETED',
+              nft_mint_address = ${existingMint},
+              nft_mint_failure_reason = NULL,
+              pending_claim_mint = NULL,
+              pending_claim_expires_at = NULL
+          WHERE id = ${id} AND nft_mint_status = 'MINTING'
+        `);
+        log.info({ wallet, badgeId, mintAddress: existingMint }, '[Job] Recovered stale mint → COMPLETED');
+      } else {
+        // NFT not found on-chain — mint truly failed
+        await db.execute(sql`
+          UPDATE badges
+          SET nft_mint_status = 'MINT_FAILED',
+              nft_mint_failure_reason = 'STALE_MINTING_TIMEOUT'
+          WHERE id = ${id} AND nft_mint_status = 'MINTING'
+        `);
+        log.info({ wallet, badgeId }, '[Job] Recovered stale mint → MINT_FAILED');
+      }
+    } catch (err) {
+      log.error({ err, wallet, badgeId }, '[Job] Error recovering stale mint');
+    }
+  }
+}
+
+/**
  * Start all background jobs with setInterval.
  * In production, use a proper job scheduler (e.g., BullMQ, node-cron).
  */
@@ -151,6 +213,11 @@ export function startBackgroundJobs(logger?: FastifyBaseLogger): void {
   intervalIds.push(setInterval(() => {
     markStaleBurns().catch((err) => log.error(err));
   }, 10 * 60 * 1000));
+
+  // Recover stale MINTING badges: every 5 minutes
+  intervalIds.push(setInterval(() => {
+    recoverStaleMints().catch((err) => log.error(err));
+  }, 5 * 60 * 1000));
 
   log.info('[Jobs] Background jobs started');
 }

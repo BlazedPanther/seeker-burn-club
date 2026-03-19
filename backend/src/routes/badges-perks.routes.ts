@@ -1,4 +1,4 @@
-﻿import { FastifyInstance } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import { eq, and, sql, isNotNull } from 'drizzle-orm';
@@ -6,42 +6,11 @@ import { db } from '../db/client.js';
 import { badges, perks, perkClaims, users } from '../db/schema.js';
 import { BADGE_DEFINITIONS, getBadgeById } from '../lib/badges.js';
 import { generateBadgeSvg, generateBadgeMetadata } from '../lib/badge-assets.js';
-import { buildBadgeClaimTransaction, findMasterEditionPDA, mintBadgeNft, verifyCollectionMembership } from '../lib/nft.js';
-import { connection } from '../lib/solana.js';
-import { fetchTransactionWithRetry } from '../services/burn.service.js';
+import { buildBadgeClaimTransaction, verifyCollectionMembership, checkDeterministicMintExists } from '../lib/nft.js';
 import { redis } from '../lib/redis.js';
 import { env } from '../config/env.js';
 import { PublicKey } from '@solana/web3.js';
 import { creatureSeed, generateCreatureGif, generateCreaturePng, generateCreatureMetadata, resolveTraits } from '../lib/creature.js';
-
-async function verifyTokenOwnershipWithRetry(
-  wallet: string,
-  mintPublicKey: string,
-  {
-    maxAttempts = 4,
-    baseDelayMs = 1500,
-  } = {},
-): Promise<boolean> {
-  const owner = new PublicKey(wallet);
-  const mint = new PublicKey(mintPublicKey);
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const { value: tokenAccounts } = await connection.getTokenAccountsByOwner(owner, { mint });
-      if (tokenAccounts.length > 0) return true;
-    } catch {
-      // Transient RPC errors are retried below.
-    }
-
-    if (attempt < maxAttempts - 1) {
-      await new Promise(r => setTimeout(r, baseDelayMs * (attempt + 1)));
-    }
-  }
-
-  return false;
-}
-
-// â”€â”€ Public badge asset routes (no auth) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export async function badgeAssetRoutes(fastify: FastifyInstance) {
   // Public showcase seeds used in onboarding/teaser UI. Real wallets are locked
@@ -293,6 +262,7 @@ export async function badgesRoutes(fastify: FastifyInstance) {
           earnedAt: b.earnedAt.toISOString(),
           nftMintAddress: b.nftMintAddress,
           nftMintStatus: b.nftMintStatus,
+          nftTxSignature: b.nftTxSignature,
         };
       })
     );
@@ -348,6 +318,14 @@ export async function badgesRoutes(fastify: FastifyInstance) {
       if (badge.nftMintStatus === 'COMPLETED' && badge.nftMintAddress) {
         return reply.code(409).send({ error: 'NFT_ALREADY_MINTED', nftMintAddress: badge.nftMintAddress });
       }
+      // Block if currently minting — prevents MINTING → PENDING_CLAIM state regression
+      // which would allow a double-payment race (F2).
+      if (badge.nftMintStatus === 'MINTING') {
+        return reply.code(409).send({
+          error: 'MINTING_IN_PROGRESS',
+          message: 'NFT is currently being minted. Please check /claim/status for updates.',
+        });
+      }
 
       const seedSalt = badge.nftSeedSalt ?? crypto.randomBytes(16).toString('hex');
       const claimTx = await buildBadgeClaimTransaction(wallet, badgeId, seedSalt);
@@ -369,12 +347,12 @@ export async function badgesRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /api/v1/badges/:badgeId/claim/confirm
-   * Called after the user has signed and broadcast the SOL payment transaction.
-   * Verifies the payment on-chain, then mints the NFT entirely server-side.
+   * Called after the user signs + sends the full mint transaction via MWA.
+   * Checks on-chain for the NFT mint; returns COMPLETED or MINTING (poll status).
    */
   fastify.post<{
     Params: { badgeId: string };
-    Body: { txSignature: string; mintPublicKey: string };
+    Body: { txSignature: string; mintPublicKey?: string };
   }>(
     '/api/v1/badges/:badgeId/claim/confirm',
     async (request, reply) => {
@@ -382,11 +360,10 @@ export async function badgesRoutes(fastify: FastifyInstance) {
       const { badgeId } = request.params;
       const confirmSchema = z.object({
         txSignature: z.string().min(64).max(88),
-        mintPublicKey: z.string().min(1).max(64),
+        mintPublicKey: z.string().max(64).optional(),
       });
       const { txSignature } = confirmSchema.parse(request.body);
 
-      // Verify the badge was earned by this user and is still pending claim
       const [badge] = await db
         .select()
         .from(badges)
@@ -397,149 +374,182 @@ export async function badgesRoutes(fastify: FastifyInstance) {
       if (badge.nftMintStatus === 'COMPLETED') {
         return reply.code(200).send({ success: true, nftMintAddress: badge.nftMintAddress });
       }
+      if (badge.nftMintStatus === 'MINTING') {
+        return reply.code(200).send({ success: true, status: 'MINTING' });
+      }
 
-      // Verify a claim was prepared (skip expiry check — if payment is verified, always honor it)
-      if (!badge.pendingClaimMint) {
+      // Verify a claim was prepared
+      if (!badge.pendingClaimMint && badge.nftMintStatus !== 'MINT_FAILED') {
         return reply.code(400).send({ error: 'NO_PENDING_CLAIM', message: 'Call /claim/prepare first.' });
       }
 
-      // Verify the transaction is confirmed on-chain (retry with linear backoff, ~56s max)
-      const txInfo = await fetchTransactionWithRetry(txSignature);
-
-      if (!txInfo || txInfo.meta?.err) {
-        return reply.code(400).send({ error: 'TRANSACTION_NOT_CONFIRMED' });
-      }
-
-      // Bind confirmation to the expected fee payer (the authenticated wallet).
-      const txKeys = txInfo.transaction.message.getAccountKeys({
-        accountKeysFromLookups: txInfo.meta?.loadedAddresses ?? undefined,
-      });
-      const feePayer = txKeys.staticAccountKeys[0];
-      if (!feePayer?.equals(new PublicKey(wallet))) {
-        return reply.code(400).send({ error: 'UNEXPECTED_FEE_PAYER' });
-      }
-
-      // Verify creator fee was paid (SOL transfer to treasury).
-      // The prepare step builds a SystemProgram.transfer to TREASURY_WALLET for CREATOR_FEE_LAMPORTS.
-      // A malicious client could remove that instruction before signing, so we verify it was executed.
-      if (env.CREATOR_FEE_LAMPORTS > 0) {
-        const treasuryKey = new PublicKey(env.TREASURY_WALLET);
-        const SYSTEM_PROGRAM_ID = new PublicKey('11111111111111111111111111111111');
-        const msgKeys = txInfo.transaction.message.getAccountKeys({
-          accountKeysFromLookups: txInfo.meta?.loadedAddresses ?? undefined,
-        });
-        const resolveKey = (i: number) => msgKeys.get(i);
-        const instructions = txInfo.transaction.message.compiledInstructions
-          ?? (txInfo.transaction.message as unknown as { instructions: typeof txInfo.transaction.message.compiledInstructions }).instructions;
-
-        let feePaid = false;
-        if (instructions) {
-          for (const ix of instructions) {
-            const programId = resolveKey(ix.programIdIndex);
-            if (!programId?.equals(SYSTEM_PROGRAM_ID)) continue;
-            const data = Buffer.from(ix.data);
-            // SystemProgram.Transfer instruction type = 2 (u32 LE), then lamports (u64 LE)
-            if (data.length >= 12 && data.readUInt32LE(0) === 2) {
-              const dest = resolveKey(ix.accountKeyIndexes[1]!);
-              const lamports = data.readBigUInt64LE(4);
-              if (dest?.equals(treasuryKey) && lamports >= BigInt(env.CREATOR_FEE_LAMPORTS)) {
-                feePaid = true;
-                break;
-              }
-            }
-          }
-        }
-
-        if (!feePaid) {
-          return reply.code(400).send({ error: 'CREATOR_FEE_NOT_PAID', message: 'Transaction does not include the required creator fee.' });
-        }
-      }
-
-      // ── Server-side NFT mint: create mint, ATA, token, metadata, master edition ──
-      // Store the payment tx signature first so we can track/recover if mint fails
-      await db
-        .update(badges)
-        .set({ nftTxSignature: txSignature, nftMintStatus: 'MINTING' })
-        .where(and(eq(badges.walletAddress, wallet), eq(badges.badgeId, badgeId)));
-
-      const seedSalt = badge.nftSeedSalt ?? undefined;
-      let mintResult: { mintPublicKey: string; txSignature: string };
+      // Rate-limit confirm calls (50/hr per wallet)
       try {
-        mintResult = await mintBadgeNft(wallet, badgeId, seedSalt);
-      } catch (mintErr) {
-        fastify.log.error({ err: mintErr, wallet, badgeId }, 'Server-side NFT mint failed');
-        return reply.code(500).send({ error: 'NFT_MINT_FAILED', message: 'Payment verified but NFT creation failed. Please retry confirm.' });
-      }
-
-      const realMintPublicKey = mintResult.mintPublicKey;
-
-      // Enforce immutable 1/1 NFT mint invariants to prevent follow-up inflation attacks.
-      let mintInvariantOk = false;
-      try {
-        const mintPubkey = new PublicKey(realMintPublicKey);
-        const masterEditionPDA = findMasterEditionPDA(mintPubkey);
-        const masterEditionStr = masterEditionPDA.toBase58();
-        const mintAcc = await connection.getParsedAccountInfo(mintPubkey);
-        const parsed = mintAcc.value?.data;
-        if (parsed && typeof parsed === 'object' && 'parsed' in parsed) {
-          const info = (parsed as { parsed?: { info?: { supply?: string; decimals?: number; mintAuthority?: string | null } } }).parsed?.info;
-          const authorityOk = info?.mintAuthority == null || info?.mintAuthority === masterEditionStr;
-          mintInvariantOk = info?.supply === '1' && info?.decimals === 0 && authorityOk;
+        const confirmRateKey = `ratelimit:claim-confirm:v2:${wallet}`;
+        const confirmCount = await redis.eval(
+          `local c = redis.call('INCR', KEYS[1]); if c == 1 then redis.call('EXPIRE', KEYS[1], 3600) end; return c`,
+          1,
+          confirmRateKey,
+        ) as number;
+        if (confirmCount > 50) {
+          return reply.code(429).send({ error: 'RATE_LIMIT_EXCEEDED', message: 'Too many confirm attempts. Try again later.' });
         }
-      } catch {
-        mintInvariantOk = false;
-      }
-      if (!mintInvariantOk) {
-        fastify.log.error({ realMintPublicKey, wallet, badgeId }, 'Mint invariant check failed after server-side mint');
-        return reply.code(500).send({ error: 'MINT_INVARIANT_FAILED' });
-      }
+      } catch { /* Redis down — allow through */ }
 
-      // Verify the user actually holds 1 token from this mint.
-      const hasToken = await verifyTokenOwnershipWithRetry(wallet, realMintPublicKey);
-      if (!hasToken) {
-        fastify.log.error({ realMintPublicKey, wallet, badgeId }, 'Token ownership verification failed after server-side mint');
-        return reply.code(500).send({ error: 'TOKEN_VERIFICATION_FAILED', message: 'Could not verify token ownership after minting.' });
-      }
-
-      // Atomic update: only mark COMPLETED if not already done (prevents double-mint from concurrent requests)
-      const updated = await db.execute(sql`
+      // Atomic state transition: only one concurrent request can claim this
+      const [transitioned] = await db.execute(sql`
         UPDATE badges
-        SET nft_mint_address = ${realMintPublicKey},
-            nft_tx_signature = ${mintResult.txSignature},
-            nft_mint_status = 'COMPLETED',
-            pending_claim_mint = NULL,
-            pending_claim_expires_at = NULL
+        SET nft_tx_signature = ${txSignature},
+            nft_mint_status = 'MINTING',
+            nft_mint_started_at = NOW(),
+            nft_mint_failure_reason = NULL
         WHERE wallet_address = ${wallet}
           AND badge_id = ${badgeId}
-          AND nft_mint_status != 'COMPLETED'
+          AND nft_mint_status IN ('PENDING_CLAIM', 'MINT_FAILED')
         RETURNING id
-      `);
-
-      const updatedRows = Array.isArray(updated) ? updated : [];
-      if (updatedRows.length === 0) {
-        // Another request already completed -- return idempotent success
-        return reply.code(200).send({ success: true, nftMintAddress: realMintPublicKey });
+      `) as unknown as { id: number }[];
+      if (!transitioned) {
+        const [current] = await db.select({ s: badges.nftMintStatus, m: badges.nftMintAddress })
+          .from(badges).where(and(eq(badges.walletAddress, wallet), eq(badges.badgeId, badgeId))).limit(1);
+        if (current?.s === 'COMPLETED') return reply.code(200).send({ success: true, nftMintAddress: current.m });
+        return reply.code(200).send({ success: true, status: current?.s ?? 'MINTING' });
       }
 
-      // Verify collection membership server-side — fire-and-forget.
-      void verifyCollectionMembership(realMintPublicKey);
+      // Immediate on-chain check — tx may already be confirmed by this point
+      const seedSalt = badge.nftSeedSalt ?? undefined;
+      const existingMint = await checkDeterministicMintExists(wallet, badgeId, seedSalt);
+      if (existingMint) {
+        await db.execute(sql`
+          UPDATE badges
+          SET nft_mint_address = ${existingMint},
+              nft_mint_status = 'COMPLETED',
+              pending_claim_mint = NULL,
+              pending_claim_expires_at = NULL
+          WHERE wallet_address = ${wallet}
+            AND badge_id = ${badgeId}
+        `);
 
-      // Pre-warm the image cache so the first marketplace/game fetch is instant.
-      void (async () => {
-        try {
-          const seed = creatureSeed(wallet, badgeId, seedSalt);
-          const [{ gif }, { png }] = await Promise.all([
-            import('../lib/creature.js').then(m => m.generateCreatureGif(seed, badgeId)),
-            import('../lib/creature.js').then(m => m.generateCreaturePng(seed, badgeId)),
-          ]);
-          await Promise.all([
-            redis.setex(`creature:gif:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, gif as unknown as string),
-            redis.setex(`creature:png:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, png as unknown as string),
-          ]);
-        } catch { /* non-fatal */ }
-      })();
+        // Fire-and-forget: collection verify + image cache warm
+        void verifyCollectionMembership(existingMint).catch(() => {});
+        void (async () => {
+          try {
+            const seed = creatureSeed(wallet, badgeId, seedSalt);
+            const [{ gif }, { png }] = await Promise.all([
+              import('../lib/creature.js').then(m => m.generateCreatureGif(seed, badgeId)),
+              import('../lib/creature.js').then(m => m.generateCreaturePng(seed, badgeId)),
+            ]);
+            await Promise.all([
+              redis.setex(`creature:gif:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, gif as unknown as string),
+              redis.setex(`creature:png:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, png as unknown as string),
+            ]);
+          } catch { /* non-fatal */ }
+        })();
 
-      return reply.code(200).send({ success: true, nftMintAddress: realMintPublicKey });
+        fastify.log.info({ mintAddress: existingMint, wallet, badgeId }, 'NFT confirmed on-chain');
+        return reply.code(200).send({ success: true, status: 'COMPLETED', nftMintAddress: existingMint });
+      }
+
+      // Not yet confirmed — client polls GET /claim/status
+      return reply.code(200).send({ success: true, status: 'MINTING' });
+    },
+  );
+
+  /**
+   * GET /api/v1/badges/:badgeId/claim/status
+   * Poll this after confirm returns { status: 'MINTING' } to check completion.
+   * Performs a live on-chain check when status is MINTING.
+   */
+  fastify.get<{ Params: { badgeId: string } }>(
+    '/api/v1/badges/:badgeId/claim/status',
+    async (request, reply) => {
+      const wallet = request.user.sub;
+      const { badgeId } = request.params;
+
+      const [badge] = await db
+        .select({
+          nftMintStatus: badges.nftMintStatus,
+          nftMintAddress: badges.nftMintAddress,
+          nftTxSignature: badges.nftTxSignature,
+          nftMintFailureReason: badges.nftMintFailureReason,
+          nftSeedSalt: badges.nftSeedSalt,
+          nftMintStartedAt: badges.nftMintStartedAt,
+        })
+        .from(badges)
+        .where(and(eq(badges.walletAddress, wallet), eq(badges.badgeId, badgeId)))
+        .limit(1);
+
+      if (!badge) return reply.code(404).send({ error: 'BADGE_NOT_FOUND' });
+
+      if (badge.nftMintStatus === 'COMPLETED') {
+        return reply.code(200).send({ status: 'COMPLETED', nftMintAddress: badge.nftMintAddress });
+      }
+
+      // Live on-chain check while MINTING
+      if (badge.nftMintStatus === 'MINTING') {
+        const seedSalt = badge.nftSeedSalt ?? undefined;
+        const existingMint = await checkDeterministicMintExists(wallet, badgeId, seedSalt);
+        if (existingMint) {
+          await db.execute(sql`
+            UPDATE badges
+            SET nft_mint_address = ${existingMint},
+                nft_mint_status = 'COMPLETED',
+                pending_claim_mint = NULL,
+                pending_claim_expires_at = NULL
+            WHERE wallet_address = ${wallet}
+              AND badge_id = ${badgeId}
+              AND nft_mint_status = 'MINTING'
+          `);
+
+          // Fire-and-forget: collection verify + cache warm
+          void verifyCollectionMembership(existingMint).catch(() => {});
+          void (async () => {
+            try {
+              const seed = creatureSeed(wallet, badgeId, seedSalt);
+              const [{ gif }, { png }] = await Promise.all([
+                import('../lib/creature.js').then(m => m.generateCreatureGif(seed, badgeId)),
+                import('../lib/creature.js').then(m => m.generateCreaturePng(seed, badgeId)),
+              ]);
+              await Promise.all([
+                redis.setex(`creature:gif:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, gif as unknown as string),
+                redis.setex(`creature:png:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, png as unknown as string),
+              ]);
+            } catch { /* non-fatal */ }
+          })();
+
+          return reply.code(200).send({ status: 'COMPLETED', nftMintAddress: existingMint });
+        }
+
+        // Auto-fail if stuck in MINTING for > 5 minutes (tx likely expired)
+        if (badge.nftMintStartedAt && Date.now() - badge.nftMintStartedAt.getTime() > 5 * 60 * 1000) {
+          await db
+            .update(badges)
+            .set({
+              nftMintStatus: 'MINT_FAILED',
+              nftMintFailureReason: 'Transaction expired. Please try again.',
+            })
+            .where(and(
+              eq(badges.walletAddress, wallet),
+              eq(badges.badgeId, badgeId),
+              sql`nft_mint_status = 'MINTING'`,
+            ));
+          return reply.code(200).send({
+            status: 'MINT_FAILED',
+            reason: 'Transaction expired. Please try again.',
+          });
+        }
+
+        return reply.code(200).send({ status: 'MINTING' });
+      }
+
+      if (badge.nftMintStatus === 'MINT_FAILED') {
+        return reply.code(200).send({
+          status: 'MINT_FAILED',
+          reason: badge.nftMintFailureReason,
+          nftTxSignature: badge.nftTxSignature,
+        });
+      }
+      // PENDING_CLAIM or PENDING
+      return reply.code(200).send({ status: badge.nftMintStatus });
     },
   );
 }

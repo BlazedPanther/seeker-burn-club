@@ -80,6 +80,7 @@ fun BadgeDetailScreen(
     var claimStep by remember(badgeId) { mutableStateOf(ClaimStep.READY) }
     var pendingClaimTxSignature by remember(badgeId) { mutableStateOf<String?>(null) }
     var pendingClaimMintPublicKey by remember(badgeId) { mutableStateOf<String?>(null) }
+    var completedMintAddress by remember(badgeId) { mutableStateOf<String?>(null) }
     val badge = remember(badgeId) {
         BadgeDefinition.ALL.find { it.id == badgeId }
     }
@@ -88,6 +89,8 @@ fun BadgeDetailScreen(
         claimStep = ClaimStep.CONFIRM
         var confirmSuccess = false
         var lastError: Exception? = null
+
+        // Step 1: fire confirm request (returns immediately with status MINTING)
         for (attempt in 1..3) {
             try {
                 badgesViewModel.confirmBadgeClaim(badgeId, txSignature, mintPublicKey)
@@ -100,11 +103,34 @@ fun BadgeDetailScreen(
         }
         if (!confirmSuccess) throw (lastError ?: Exception("Confirmation failed"))
 
-        pendingClaimTxSignature = null
-        pendingClaimMintPublicKey = null
-        claimError = null
-        claimStep = ClaimStep.COMPLETE
-        badgesViewModel.refresh()
+        // Step 2: poll claim/status every 5s until COMPLETED or MINT_FAILED (max 10 min)
+        val maxPolls = 120
+        var pollCount = 0
+        var mintDone = false
+        while (pollCount < maxPolls && !mintDone) {
+            kotlinx.coroutines.delay(5000L)
+            pollCount++
+            try {
+                val statusRes = badgesViewModel.getClaimStatus(badgeId)
+                when (statusRes.status) {
+                    "COMPLETED" -> {
+                        pendingClaimTxSignature = null
+                        pendingClaimMintPublicKey = null
+                        claimError = null
+                        completedMintAddress = statusRes.nftMintAddress
+                        claimStep = ClaimStep.COMPLETE
+                        badgesViewModel.refresh()
+                        mintDone = true
+                    }
+                    "MINT_FAILED" -> throw Exception("NFT minting failed. Your SOL is safe — please try again.")
+                    else -> { /* MINTING — keep polling */ }
+                }
+            } catch (se: Exception) {
+                if (se.message?.contains("MINT_FAILED") == true) throw se
+                // Transient network error — keep polling
+            }
+        }
+        if (!mintDone) throw Exception("Minting is taking longer than expected. Your claim is saved \u2014 check back later.")
     }
 
     if (badge == null) {
@@ -123,8 +149,9 @@ fun BadgeDetailScreen(
     val badgeItem = badgesState.badges.find { it.definition.id == badgeId }
     val isEarned = badgeItem?.isEarned ?: false
     val earnedDate: String? = badgeItem?.earnedAt
-    val nftMintAddress: String? = badgeItem?.nftMintAddress
+    val nftMintAddress: String? = completedMintAddress ?: badgeItem?.nftMintAddress
     val nftMintStatus: String? = badgeItem?.nftMintStatus
+    val nftTxSignature: String? = badgeItem?.nftTxSignature
     val currentProgress = when (badge.type) {
         BadgeType.STREAK -> homeState.currentStreak
         BadgeType.LIFETIME -> homeState.lifetimeBurned.toInt()
@@ -138,8 +165,49 @@ fun BadgeDetailScreen(
     val badgeStatus = when {
         !isEarned -> BadgeUiStatus.LOCKED
         nftMintAddress != null -> BadgeUiStatus.MINTED
-        isClaiming || hasPendingConfirm || nftMintStatus == "PENDING_CLAIM" -> BadgeUiStatus.PENDING_CONFIRM
+        nftMintStatus == "MINT_FAILED" && !isClaiming -> BadgeUiStatus.MINT_FAILED
+        isClaiming || hasPendingConfirm || nftMintStatus == "PENDING_CLAIM" || nftMintStatus == "MINTING" -> BadgeUiStatus.PENDING_CONFIRM
         else -> BadgeUiStatus.EARNED
+    }
+
+    // Auto-resume polling when badge is stuck in MINTING state (e.g. app restart during mint)
+    LaunchedEffect(nftMintStatus) {
+        if (nftMintStatus != "MINTING" || isClaiming) return@LaunchedEffect
+        isClaiming = true
+        claimStep = ClaimStep.CONFIRM
+        claimError = null
+        try {
+            var mintDone = false
+            repeat(120) {
+                delay(5000L)
+                try {
+                    val s = badgesViewModel.getClaimStatus(badgeId)
+                    when (s.status) {
+                        "COMPLETED" -> {
+                            completedMintAddress = s.nftMintAddress
+                            claimStep = ClaimStep.COMPLETE
+                            claimError = null
+                            badgesViewModel.refresh()
+                            mintDone = true
+                            return@LaunchedEffect
+                        }
+                        "MINT_FAILED" -> throw Exception(
+                            "NFT minting failed. Your SOL is safe \u2014 tap Retry Mint."
+                        )
+                    }
+                } catch (se: Exception) {
+                    if (se.message?.contains("MINT_FAILED") == true) throw se
+                }
+            }
+            if (!mintDone) {
+                claimError = "Minting is taking longer than expected. Your claim is saved \u2014 check back later."
+            }
+        } catch (e: Exception) {
+            claimError = mapClaimError(e)
+        } finally {
+            isClaiming = false
+            badgesViewModel.refresh()
+        }
     }
 
     Scaffold(
@@ -453,6 +521,16 @@ fun BadgeDetailScreen(
                             )
                         }
 
+                        // MINT_FAILED — transaction expired, user wasn't charged
+                        if (nftMintStatus == "MINT_FAILED" && !isClaiming) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Previous attempt expired — you were not charged. Tap the button below to try again.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.textTertiary,
+                            )
+                        }
+
                         if (hasPendingConfirm) {
                             val retryTxSignature = pendingClaimTxSignature
                             val retryMintPublicKey = pendingClaimMintPublicKey
@@ -550,6 +628,7 @@ private enum class BadgeUiStatus {
     LOCKED,
     EARNED,
     PENDING_CONFIRM,
+    MINT_FAILED,
     MINTED,
 }
 
@@ -582,6 +661,12 @@ private fun BadgeStatusBanner(status: BadgeUiStatus) {
             "Pending Confirmation",
             "Transaction is in progress. Keep this screen open until confirmed.",
             colors.warning,
+        )
+        BadgeUiStatus.MINT_FAILED -> Quadruple(
+            BurnIcons.Timer,
+            "Mint Failed",
+            "The NFT mint encountered an error. Tap Retry Mint — no additional payment needed.",
+            colors.error,
         )
         BadgeUiStatus.MINTED -> Quadruple(
             BurnIcons.Verified,
@@ -723,6 +808,7 @@ private fun mapClaimError(error: Throwable): String {
             "CLAIM_EXPIRED" -> "Claim expired. Tap Claim NFT again to generate a fresh transaction."
             "MINT_MISMATCH" -> "Claim data mismatch. Please claim again from the badge screen."
             "TRANSACTION_NOT_CONFIRMED" -> "Transaction not confirmed yet. Wait a moment and tap Retry Confirm."
+            "MINTING_IN_PROGRESS" -> "NFT is currently being minted. Please wait for it to complete."
             "TOKEN_VERIFICATION_FAILED" -> "Mint found but ownership check is still syncing. Tap Retry Confirm in a few seconds."
             "RATE_LIMIT_EXCEEDED" -> "Too many claim attempts. Please wait and try again."
             else -> "Claim failed (HTTP ${error.statusCode}). Please try again."
