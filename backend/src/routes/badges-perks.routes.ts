@@ -319,7 +319,8 @@ export async function badgesRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Rate limit: max 3 claim prepares per hour per wallet (expensive: Keypair + RPC + partialSign)
+      // Rate limit: max 10 claim prepares per hour per wallet
+      // (prepare is now a cheap SOL-transfer build — no keypair gen or partial signing)
       try {
         const rateKey = `ratelimit:claim-prepare:${wallet}`;
         const count = await redis.eval(
@@ -327,8 +328,8 @@ export async function badgesRoutes(fastify: FastifyInstance) {
           1,
           rateKey,
         ) as number;
-        if (count > 3) {
-          return reply.code(429).send({ error: 'RATE_LIMIT_EXCEEDED', message: 'Max 3 claim prepares per hour.' });
+        if (count > 10) {
+          return reply.code(429).send({ error: 'RATE_LIMIT_EXCEEDED', message: 'Max 10 claim prepares per hour.' });
         }
       } catch { /* Redis down -- allow */ }
 
