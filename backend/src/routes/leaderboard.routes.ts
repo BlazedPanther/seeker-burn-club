@@ -82,8 +82,8 @@ export async function leaderboardRoutes(fastify: FastifyInstance) {
     const wallet = request.user.sub;
     const { type } = request.params as { type: string };
     const { page = '1', limit = '50' } = request.query as Record<string, string>;
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 50));
     const offset = (pageNum - 1) * limitNum;
 
     if (!(type in LEADERBOARD_CONFIG)) {

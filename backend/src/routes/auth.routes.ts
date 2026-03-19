@@ -75,7 +75,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'UNKNOWN_ERROR';
       const code = msg === 'INVALID_NONCE' || msg === 'NONCE_ALREADY_USED' || msg === 'NONCE_EXPIRED'
-        ? 400 : msg === 'INVALID_SIGNATURE' ? 401 : 500;
+        ? 400 : msg === 'INVALID_SIGNATURE' || msg === 'INVALID_SIGNATURE_FORMAT' ? 401 : 500;
       fastify.log.error({ err: e, wallet: body.walletAddress }, 'Auth verify failed');
       return reply.code(code).send({ error: msg });
     }

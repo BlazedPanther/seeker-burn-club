@@ -36,7 +36,7 @@ object SeekerBurnConfig {
     const val ATA_PROGRAM_ID = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
 
     /** App identity for wallet adapter (must be a real reachable HTTPS origin) */
-    val APP_IDENTITY_URI: String = BuildConfig.BACKEND_URL
+    val APP_IDENTITY_URI: String = "https://seekerburnclub.xyz"
     const val APP_IDENTITY_NAME = "Seeker Burn Club"
     // MWA ConnectionIdentity requires iconRelativeUri to be a RELATIVE URI.
     // The wallet resolves the full icon URL as: APP_IDENTITY_URI + APP_ICON_URI.

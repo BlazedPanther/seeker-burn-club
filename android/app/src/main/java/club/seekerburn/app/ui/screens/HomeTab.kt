@@ -148,7 +148,7 @@ fun HomeTab(
             Image(
                 painter = painterResource(R.mipmap.ic_launcher_foreground),
                 contentDescription = "Seeker Burn",
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(46.dp),
             )
 
             if (walletAddress.isNullOrBlank()) {
@@ -526,11 +526,14 @@ fun HomeTab(
                 isLoading = uiState.isLoading,
             )
 
-            // SOL faucet hint — shown when wallet has no devnet SOL for gas
+            // SOL balance hint — shown when wallet has insufficient SOL for gas
             if (uiState.insufficientSol) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "You need devnet SOL for transaction gas fees.\nGet free SOL at faucet.solana.com — select Devnet & paste your wallet address.",
+                    text = if (SeekerBurnConfig.IS_DEVNET)
+                        "You need devnet SOL for transaction gas fees.\nGet free SOL at faucet.solana.com — select Devnet & paste your wallet address."
+                    else
+                        "You need SOL for transaction gas fees.\nPlease fund your wallet with a small amount of SOL.",
                     style = MaterialTheme.typography.bodySmall,
                     color = SeekerBurnTheme.colors.warning,
                     textAlign = TextAlign.Center,
@@ -541,7 +544,7 @@ fun HomeTab(
             if (uiState.insufficientBalance) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Not enough SKR for this burn. Confirm your wallet holds SKR on Devnet for mint ${SeekerBurnConfig.SKR_MINT.take(6)}...${SeekerBurnConfig.SKR_MINT.takeLast(4)}.",
+                    text = "Not enough SKR for this burn. Confirm your wallet holds SKR (mint: ${SeekerBurnConfig.SKR_MINT.take(6)}…${SeekerBurnConfig.SKR_MINT.takeLast(4)}).",
                     style = MaterialTheme.typography.bodySmall,
                     color = SeekerBurnTheme.colors.warning,
                     textAlign = TextAlign.Center,
@@ -599,35 +602,41 @@ fun HomeTab(
             }
             Spacer(modifier = Modifier.height(16.dp))
         } else if (!walletAddress.isNullOrBlank()) {
-            // Teaser for users with no badges yet
+            // Teaser — high-end spirit preview for wallets with no minted badges yet
             BurnCard {
                 SectionHeader(title = "Burn Spirits")
                 Text(
-                    text = "Earn badges to unlock unique pixel creatures — each one is yours alone",
+                    text = "Mint badges to summon NFT creatures. Each spirit is uniquely yours — locked until earned.",
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.textTertiary,
-                    modifier = Modifier.padding(bottom = 10.dp),
+                    modifier = Modifier.padding(bottom = 12.dp),
                 )
                 val ctx = LocalContext.current
-                val teaserEntries = listOf(
-                    "SBCSpirit_Ember" to "BURN_1",
-                    "SBCSpirit_Abyss" to "STREAK_7",
-                    "SBCSpirit_Solaris" to "STREAK_30",
-                )
+                // Showcase seeds bypass the minted-badge lock on the backend (isShowcaseWallet check).
+                // Badge IDs must match valid BADGE_DEFINITIONS — BURN_10 is the first burn badge ("Ember").
+                data class SpiritPreview(val seed: String, val badgeId: String, val name: String, val requirement: String)
+                val teaserSpirits = remember {
+                    listOf(
+                        SpiritPreview("SBCSpirit_Ember",   "BURN_10",   "EMBER",   "10 SKR burned"),
+                        SpiritPreview("SBCSpirit_Abyss",   "STREAK_7",  "ABYSS",   "7-day streak"),
+                        SpiritPreview("SBCSpirit_Solaris", "STREAK_30", "SOLARIS", "30-day streak"),
+                    )
+                }
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    teaserEntries.forEach { (seed, bId) ->
-                        val url = "${SeekerBurnConfig.BACKEND_URL}/api/v1/creatures/image/$seed/$bId.gif"
+                    teaserSpirits.forEach { spirit ->
+                        val url = "${SeekerBurnConfig.BACKEND_URL}/api/v1/creatures/image/${spirit.seed}/${spirit.badgeId}.gif"
                         Box(
                             modifier = Modifier
                                 .weight(1f)
                                 .aspectRatio(1f)
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(10.dp))
+                                .border(1.dp, colors.primary.copy(alpha = 0.30f), RoundedCornerShape(10.dp))
                                 .background(colors.surfaceElevated),
-                            contentAlignment = Alignment.Center,
                         ) {
+                            // Spirit GIF — dimmed to signal locked state
                             SubcomposeAsyncImage(
                                 model = ImageRequest.Builder(ctx)
                                     .data(url)
@@ -635,19 +644,68 @@ fun HomeTab(
                                     .memoryCacheKey(url)
                                     .crossfade(true)
                                     .build(),
-                                contentDescription = "Example creature",
-                                modifier = Modifier.fillMaxSize(),
+                                contentDescription = "${spirit.name} spirit preview",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .alpha(0.58f),
                                 loading = {
                                     CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
+                                        modifier = Modifier
+                                            .align(Alignment.Center)
+                                            .size(16.dp),
                                         color = colors.primary,
-                                        strokeWidth = 2.dp,
+                                        strokeWidth = 1.5.dp,
                                     )
                                 },
+                            )
+                            // Bottom gradient overlay with spirit name + requirement
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .align(Alignment.BottomCenter)
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(Color.Transparent, colors.surface.copy(alpha = 0.96f)),
+                                        ),
+                                    )
+                                    .padding(horizontal = 4.dp, vertical = 5.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = spirit.name,
+                                        fontFamily = PressStart2P,
+                                        fontSize = 5.sp,
+                                        color = colors.textPrimary,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                    Text(
+                                        text = spirit.requirement,
+                                        fontSize = 6.sp,
+                                        color = colors.primary,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                }
+                            }
+                            // Lock badge — top-right corner
+                            Text(
+                                text = "🔒",
+                                fontSize = 9.sp,
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(4.dp),
                             )
                         }
                     }
                 }
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = "Burn SKR  •  Build streaks  •  Unlock your spirit",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textTertiary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
             Spacer(modifier = Modifier.height(16.dp))
         }

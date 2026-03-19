@@ -15,29 +15,40 @@ const intervalIds: NodeJS.Timeout[] = [];
 export async function resetBrokenStreaks(): Promise<number> {
   const today = todayUTC();
   const yesterday = yesterdayUTC(today);
-  // Grace period: only reset streaks if last burn was before yesterday.
-  // This prevents resetting a streak at 00:05 UTC for a user who just hasn't
-  // burned yet today — they still have until 23:59 UTC to maintain their streak.
-  const dayBeforeYesterday = yesterdayUTC(yesterday);
+  // Grace period: only reset streaks if last burn was strictly before yesterday.
+  // This prevents resetting a streak at 00:05 UTC for a user who burned yesterday
+  // but hasn't burned yet today — they still have until 23:59 UTC to continue.
 
-  // Advisory lock prevents concurrent execution across multiple server instances
-  const lockResult = await db.execute(sql`SELECT pg_try_advisory_lock(1001) AS acquired`);
-  const lockRow = lockResult[0] as unknown as Record<string, unknown> | undefined;
-  const acquired = lockRow?.acquired;
-  if (!acquired) {
-    log.info('[Job] Streak reset skipped — another instance holds the lock');
-    return 0;
-  }
+  // Use a TRANSACTION-level advisory lock (pg_try_advisory_xact_lock) inside a
+  // db.transaction() so the lock is automatically released when the transaction
+  // commits or rolls back — regardless of which pool connection is used.
+  //
+  // Session-level locks (pg_try_advisory_lock) must NOT be used here because:
+  //   1. db.execute() borrows a connection, runs the query, and returns it to the pool.
+  //   2. The lock is acquired on connection A but subsequent db.execute() calls can
+  //      run on connections B, C, D …
+  //   3. pg_advisory_unlock on a different connection is a silent no-op — the lock
+  //      stays on connection A until its session ends (pool shutdown / process restart).
+  //   4. All future scheduler runs see the lock as held and skip forever.
+  return db.transaction(async (tx) => {
+    // pg_try_advisory_xact_lock: non-blocking, returns immediately if lock is unavailable.
+    // Automatically released when the transaction ends.
+    const lockResult = await tx.execute(sql`SELECT pg_try_advisory_xact_lock(1001) AS acquired`);
+    const lockRow = lockResult[0] as unknown as Record<string, unknown> | undefined;
+    const acquired = lockRow?.acquired;
+    if (!acquired) {
+      log.info('[Job] Streak reset skipped — another instance holds the lock');
+      return 0;
+    }
 
-  try {
     // First: consume shields for users who would lose their streak but have a shield active
-    const shieldResult = await db.execute(sql`
+    const shieldResult = await tx.execute(sql`
       UPDATE users
       SET streak_shield_active = false,
           updated_at = NOW()
       WHERE current_streak > 0
         AND streak_shield_active = true
-        AND last_burn_date < ${dayBeforeYesterday}
+        AND last_burn_date < ${yesterday}
       RETURNING wallet_address, current_streak
     `);
     const shieldRows = Array.isArray(shieldResult) ? shieldResult : [];
@@ -47,23 +58,22 @@ export async function resetBrokenStreaks(): Promise<number> {
     }
 
     // Then: reset streaks for unshielded users who missed burns
-    const result = await db.execute(sql`
+    const result = await tx.execute(sql`
       UPDATE users
       SET current_streak = 0,
           streak_broken_at = NOW(),
           updated_at = NOW()
       WHERE current_streak > 0
         AND streak_shield_active = false
-        AND last_burn_date < ${dayBeforeYesterday}
+        AND last_burn_date < ${yesterday}
       RETURNING wallet_address, current_streak AS old_streak
     `);
 
-    // db.execute returns rows array
     const rows = Array.isArray(result) ? result : [];
     const count = rows.length;
 
     if (count > 0) {
-      await db.insert(securityLogs).values({
+      await tx.insert(securityLogs).values({
         eventType: 'STREAK_RESET_JOB',
         details: { count, date: today },
         severity: 'INFO',
@@ -72,9 +82,7 @@ export async function resetBrokenStreaks(): Promise<number> {
 
     log.info(`[Job] Reset ${count} broken streaks`);
     return count;
-  } finally {
-    await db.execute(sql`SELECT pg_advisory_unlock(1001)`);
-  }
+  });
 }
 
 /**

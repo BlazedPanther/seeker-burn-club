@@ -10,7 +10,7 @@ plugins {
 val debugSkrMint = "CyHB1R1isTShErodMLCWCeXHTQC9SkVqJDG1Ezzk83GM"
 val debugTreasuryWallet = "nP25k2QNCiGKwQLyYvuLhKpbRukN7n7qQtbbcEm4Te5"
 val debugTreasuryAta = "Pn6FkEHtDqA8RDxJEgkjxUozLjn2weLX58bVS2aWUPD"
-val apiHost = "seeker-burn-api-production.up.railway.app"
+val apiHost = "api.seekerburnclub.xyz"
 
 fun debugValue(name: String, fallback: String): String {
     return providers.gradleProperty(name).orNull
@@ -90,7 +90,7 @@ android {
             )
             // ── Mainnet release overrides ────────────────────────────────────────
             buildConfigField("boolean", "IS_DEVNET", "false")
-            buildConfigField("String", "BACKEND_URL", "\"https://seeker-burn-api-production.up.railway.app\"")
+            buildConfigField("String", "BACKEND_URL", "\"https://api.seekerburnclub.xyz\"")
             buildConfigField("String", "RPC_URL", "\"https://api.mainnet-beta.solana.com\"")
             buildConfigField("String", "SKR_MINT", "\"$releaseSkrMint\"")
             buildConfigField("String", "TREASURY_WALLET", "\"$releaseTreasuryWallet\"")

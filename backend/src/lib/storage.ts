@@ -20,6 +20,8 @@ import { getBadgeById } from './badges.js';
 export interface CreatureAssetUrls {
   /** URL for the GIF image (served by backend) */
   imageUrl: string;
+  /** URL for the transparent PNG image — use this for minigame sprites */
+  pngUrl: string;
   /** URL for the JSON metadata (served by backend) */
   metadataUrl: string;
   /** false = backend-hosted, regenerated on demand */
@@ -44,6 +46,7 @@ export async function uploadCreatureAssets(
   const baseUrl = env.BACKEND_URL;
   return {
     imageUrl: `${baseUrl}/api/v1/creatures/image/${wallet}/${badgeId}.gif`,
+    pngUrl: `${baseUrl}/api/v1/creatures/image/${wallet}/${badgeId}.png`,
     metadataUrl: `${baseUrl}/api/v1/creatures/metadata/${wallet}/${badgeId}.json`,
     permanent: false,
   };

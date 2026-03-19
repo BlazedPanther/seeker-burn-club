@@ -494,18 +494,13 @@ fun BadgeDetailScreen(
                                 isClaiming = true
                                 coroutineScope.launch {
                                     try {
-                                        // Step 1: backend builds partial-signed tx
                                         claimStep = ClaimStep.PREPARE
                                         val prepare = badgesViewModel.prepareBadgeClaim(badgeId)
-                                        // Step 2: user signs + broadcasts (pays gas)
                                         claimStep = ClaimStep.SIGN
                                         val txBytes = Base64.decode(prepare.serializedTx, Base64.DEFAULT)
                                         val signature = badgesViewModel.signAndSendTransaction(walletSender, txBytes)
-                                        // Persist pending claim data so confirm can be retried without new tx.
                                         pendingClaimTxSignature = signature
                                         pendingClaimMintPublicKey = prepare.mintPublicKey
-
-                                        // Step 3: confirm on backend.
                                         claimStep = ClaimStep.CONFIRM
                                         confirmPendingClaim(signature, prepare.mintPublicKey)
                                         claimStep = ClaimStep.COMPLETE
@@ -536,11 +531,12 @@ fun BadgeDetailScreen(
                                     strokeWidth = 2.dp,
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Minting / Confirming…")
+                                Text("Minting / Confirming\u2026")
                             } else {
-                                Text("🔥 Claim NFT — You Pay Gas")
+                                Text("\uD83D\uDD25 Claim NFT \u2014 You Pay Gas")
                             }
                         }
+
                     }
                 }
             }

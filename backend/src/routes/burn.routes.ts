@@ -118,6 +118,14 @@ export async function burnRoutes(fastify: FastifyInstance) {
           maxSupportedTransactionVersion: 0,
         });
         if (tx && !tx.meta?.err) {
+          // Verify that the authenticated wallet is the fee-payer of this transaction
+          // before revealing its status. The fee-payer is always the first static account key.
+          const feePayer = tx.transaction.message.getAccountKeys({
+            accountKeysFromLookups: tx.meta?.loadedAddresses ?? undefined,
+          }).staticAccountKeys[0];
+          if (!feePayer || feePayer.toBase58() !== wallet) {
+            return reply.code(403).send({ error: 'FORBIDDEN' });
+          }
           // Transaction exists and succeeded on-chain but wasn't recorded yet.
           // Tell the client to re-POST /burn/submit.
           return reply.code(202).send({

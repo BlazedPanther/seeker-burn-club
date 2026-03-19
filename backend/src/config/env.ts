@@ -14,6 +14,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default('0.0.0.0'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  TRUST_PROXY: envBoolean(false),
+  TRUSTED_PROXY_CIDRS: z.string().optional(),
 
   // Database
   DATABASE_URL: z.string().url(),
@@ -40,6 +42,9 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default('24h'),
   SIWS_CHALLENGE_TTL: z.coerce.number().default(300),
+  SIWS_DOMAIN: z.string().default('seekerburnclub.xyz'),
+  SIWS_URI: z.string().url().default('https://seekerburnclub.xyz'),
+  SIWS_CHAIN: z.string().default('solana:mainnet'),
 
   // Metaplex
   BADGE_COLLECTION_MINT: z.string().optional(),

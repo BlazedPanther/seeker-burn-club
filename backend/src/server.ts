@@ -36,6 +36,11 @@ declare module '@fastify/jwt' {
 }
 
 async function buildServer() {
+  const trustedProxies = env.TRUSTED_PROXY_CIDRS
+    ?.split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+
   // Safely resolve pino-pretty transport (devDependency - may not be installed)
   let transport: { target: string } | undefined;
   if (env.NODE_ENV !== 'production') {
@@ -52,7 +57,7 @@ async function buildServer() {
       level: env.NODE_ENV === 'production' ? 'info' : 'debug',
       transport,
     },
-    trustProxy: true,
+    trustProxy: env.TRUST_PROXY ? (trustedProxies?.length ? trustedProxies : true) : false,
     bodyLimit: 256 * 1024, // 256 KB - sufficient for all JSON payloads
   });
 
@@ -145,6 +150,23 @@ async function buildServer() {
       : (error.message || 'INTERNAL_SERVER_ERROR');
     return reply.code(statusCode).send({
       error: message,
+    });
+  });
+
+  // ── Solana Mobile Wallet Adapter dApp association ──────────────────────────
+  // The wallet fetches this to verify that the domain seekerburnclub.xyz is
+  // legitimately associated with the Android package club.seekerburn.app.
+  // Without it the wallet shows '?' / 'Unknown' next to the app identity.
+  fastify.get('/.well-known/wallet-association.json', async (_request, reply) => {
+    reply.header('Content-Type', 'application/json');
+    reply.header('Cache-Control', 'public, max-age=86400');
+    reply.header('Access-Control-Allow-Origin', '*');
+    return reply.code(200).send({
+      associated_apps: [
+        {
+          android_package_name: 'club.seekerburn.app',
+        },
+      ],
     });
   });
 

@@ -6,13 +6,13 @@ import { db } from '../db/client.js';
 import { badges, perks, perkClaims, users } from '../db/schema.js';
 import { BADGE_DEFINITIONS, getBadgeById } from '../lib/badges.js';
 import { generateBadgeSvg, generateBadgeMetadata } from '../lib/badge-assets.js';
-import { buildBadgeClaimTransaction } from '../lib/nft.js';
+import { buildBadgeClaimTransaction, findMasterEditionPDA, mintBadgeNft, verifyCollectionMembership } from '../lib/nft.js';
 import { connection } from '../lib/solana.js';
 import { fetchTransactionWithRetry } from '../services/burn.service.js';
 import { redis } from '../lib/redis.js';
 import { env } from '../config/env.js';
 import { PublicKey } from '@solana/web3.js';
-import { creatureSeed, generateCreatureGif, generateCreatureMetadata, resolveTraits } from '../lib/creature.js';
+import { creatureSeed, generateCreatureGif, generateCreaturePng, generateCreatureMetadata, resolveTraits } from '../lib/creature.js';
 
 async function verifyTokenOwnershipWithRetry(
   wallet: string,
@@ -167,12 +167,48 @@ export async function badgeAssetRoutes(fastify: FastifyInstance) {
       const { gif } = generateCreatureGif(seed, badgeId, { transparent: wantTransparent });
 
       // Store in Redis (fire-and-forget; TTL 30 days)
-      try { await redis.setex(cacheKey, 60 * 60 * 24 * 30, gif as unknown as string); } catch { /* Redis down */ }
+      try { await redis.setex(cacheKey, 60 * 60 * 24 * 365, gif as unknown as string); } catch { /* Redis down */ }
 
       reply.header('Content-Type', 'image/gif');
       reply.header('Cache-Control', 'public, max-age=31536000, immutable');
       reply.header('X-Cache', 'MISS');
       return reply.code(200).send(gif);
+    },
+  );
+
+  // GET /api/v1/creatures/image/:wallet/:badgeId.png -- Transparent RGBA PNG (game sprite)
+  fastify.get<{ Params: { wallet: string; badgeId: string } }>(
+    '/api/v1/creatures/image/:wallet/:badgeId.png',
+    async (request, reply) => {
+      const wallet = request.params.wallet;
+      const badgeId = request.params.badgeId.replace(/\.png$/, '');
+      const def = getBadgeById(badgeId);
+      if (!def) return reply.code(404).send({ error: 'BADGE_NOT_FOUND' });
+      const access = await getMintedCreatureAccess(wallet, badgeId);
+      if (!access.allowed) {
+        return reply.code(404).send({ error: 'CREATURE_LOCKED_UNTIL_MINT' });
+      }
+
+      const cacheKey = `creature:png:${wallet}:${badgeId}`;
+      try {
+        const cached = await redis.getBuffer(cacheKey);
+        if (cached) {
+          reply.header('Content-Type', 'image/png');
+          reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+          reply.header('X-Cache', 'HIT');
+          return reply.code(200).send(cached);
+        }
+      } catch { /* Redis down -- fall through to generation */ }
+
+      const seed = creatureSeed(wallet, badgeId, access.seedSalt);
+      const { png } = generateCreaturePng(seed, badgeId);
+
+      try { await redis.setex(cacheKey, 60 * 60 * 24 * 365, png as unknown as string); } catch { /* Redis down */ }
+
+      reply.header('Content-Type', 'image/png');
+      reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+      reply.header('X-Cache', 'MISS');
+      return reply.code(200).send(png);
     },
   );
 
@@ -332,8 +368,8 @@ export async function badgesRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /api/v1/badges/:badgeId/claim/confirm
-   * Called after the user has signed and broadcast the NFT mint transaction.
-   * Verifies the transaction on-chain and records the mint address.
+   * Called after the user has signed and broadcast the SOL payment transaction.
+   * Verifies the payment on-chain, then mints the NFT entirely server-side.
    */
   fastify.post<{
     Params: { badgeId: string };
@@ -345,9 +381,9 @@ export async function badgesRoutes(fastify: FastifyInstance) {
       const { badgeId } = request.params;
       const confirmSchema = z.object({
         txSignature: z.string().min(64).max(88),
-        mintPublicKey: z.string().min(32).max(44),
+        mintPublicKey: z.string().min(1).max(64),
       });
-      const { txSignature, mintPublicKey } = confirmSchema.parse(request.body);
+      const { txSignature } = confirmSchema.parse(request.body);
 
       // Verify the badge was earned by this user and is still pending claim
       const [badge] = await db
@@ -361,12 +397,9 @@ export async function badgesRoutes(fastify: FastifyInstance) {
         return reply.code(200).send({ success: true, nftMintAddress: badge.nftMintAddress });
       }
 
-      // Verify the mint matches what was generated in prepare
+      // Verify a claim was prepared
       if (!badge.pendingClaimMint) {
         return reply.code(400).send({ error: 'NO_PENDING_CLAIM', message: 'Call /claim/prepare first.' });
-      }
-      if (badge.pendingClaimMint !== mintPublicKey) {
-        return reply.code(400).send({ error: 'MINT_MISMATCH', message: 'Mint does not match the prepared transaction.' });
       }
       if (badge.pendingClaimExpiresAt && new Date() > new Date(badge.pendingClaimExpiresAt)) {
         return reply.code(400).send({ error: 'CLAIM_EXPIRED', message: 'Prepared claim has expired. Call /claim/prepare again.' });
@@ -379,15 +412,17 @@ export async function badgesRoutes(fastify: FastifyInstance) {
         return reply.code(400).send({ error: 'TRANSACTION_NOT_CONFIRMED' });
       }
 
-      // Verify the user actually holds 1 token from this mint.
-      // RPC indexers can lag briefly right after mint, so we retry a few times.
-      const hasToken = await verifyTokenOwnershipWithRetry(wallet, mintPublicKey);
-      if (!hasToken) {
-        return reply.code(400).send({ error: 'TOKEN_VERIFICATION_FAILED', message: 'Could not verify token ownership. Please retry.' });
+      // Bind confirmation to the expected fee payer (the authenticated wallet).
+      const txKeys = txInfo.transaction.message.getAccountKeys({
+        accountKeysFromLookups: txInfo.meta?.loadedAddresses ?? undefined,
+      });
+      const feePayer = txKeys.staticAccountKeys[0];
+      if (!feePayer?.equals(new PublicKey(wallet))) {
+        return reply.code(400).send({ error: 'UNEXPECTED_FEE_PAYER' });
       }
 
-      // Verify creator fee was paid (if configured).
-      // The prepare step adds a SystemProgram.transfer to TREASURY_WALLET for CREATOR_FEE_LAMPORTS.
+      // Verify creator fee was paid (SOL transfer to treasury).
+      // The prepare step builds a SystemProgram.transfer to TREASURY_WALLET for CREATOR_FEE_LAMPORTS.
       // A malicious client could remove that instruction before signing, so we verify it was executed.
       if (env.CREATOR_FEE_LAMPORTS > 0) {
         const treasuryKey = new PublicKey(env.TREASURY_WALLET);
@@ -422,11 +457,51 @@ export async function badgesRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // ── Server-side NFT mint: create mint, ATA, token, metadata, master edition ──
+      const seedSalt = badge.nftSeedSalt ?? undefined;
+      let mintResult: { mintPublicKey: string; txSignature: string };
+      try {
+        mintResult = await mintBadgeNft(wallet, badgeId, seedSalt);
+      } catch (mintErr) {
+        fastify.log.error({ err: mintErr, wallet, badgeId }, 'Server-side NFT mint failed');
+        return reply.code(500).send({ error: 'NFT_MINT_FAILED', message: 'Payment verified but NFT creation failed. Please retry confirm.' });
+      }
+
+      const realMintPublicKey = mintResult.mintPublicKey;
+
+      // Enforce immutable 1/1 NFT mint invariants to prevent follow-up inflation attacks.
+      let mintInvariantOk = false;
+      try {
+        const mintPubkey = new PublicKey(realMintPublicKey);
+        const masterEditionPDA = findMasterEditionPDA(mintPubkey);
+        const masterEditionStr = masterEditionPDA.toBase58();
+        const mintAcc = await connection.getParsedAccountInfo(mintPubkey);
+        const parsed = mintAcc.value?.data;
+        if (parsed && typeof parsed === 'object' && 'parsed' in parsed) {
+          const info = (parsed as { parsed?: { info?: { supply?: string; decimals?: number; mintAuthority?: string | null } } }).parsed?.info;
+          const authorityOk = info?.mintAuthority == null || info?.mintAuthority === masterEditionStr;
+          mintInvariantOk = info?.supply === '1' && info?.decimals === 0 && authorityOk;
+        }
+      } catch {
+        mintInvariantOk = false;
+      }
+      if (!mintInvariantOk) {
+        fastify.log.error({ realMintPublicKey, wallet, badgeId }, 'Mint invariant check failed after server-side mint');
+        return reply.code(500).send({ error: 'MINT_INVARIANT_FAILED' });
+      }
+
+      // Verify the user actually holds 1 token from this mint.
+      const hasToken = await verifyTokenOwnershipWithRetry(wallet, realMintPublicKey);
+      if (!hasToken) {
+        fastify.log.error({ realMintPublicKey, wallet, badgeId }, 'Token ownership verification failed after server-side mint');
+        return reply.code(500).send({ error: 'TOKEN_VERIFICATION_FAILED', message: 'Could not verify token ownership after minting.' });
+      }
+
       // Atomic update: only mark COMPLETED if not already done (prevents double-mint from concurrent requests)
       const updated = await db.execute(sql`
         UPDATE badges
-        SET nft_mint_address = ${mintPublicKey},
-            nft_tx_signature = ${txSignature},
+        SET nft_mint_address = ${realMintPublicKey},
+            nft_tx_signature = ${mintResult.txSignature},
             nft_mint_status = 'COMPLETED',
             pending_claim_mint = NULL,
             pending_claim_expires_at = NULL
@@ -439,10 +514,28 @@ export async function badgesRoutes(fastify: FastifyInstance) {
       const updatedRows = Array.isArray(updated) ? updated : [];
       if (updatedRows.length === 0) {
         // Another request already completed -- return idempotent success
-        return reply.code(200).send({ success: true, nftMintAddress: mintPublicKey });
+        return reply.code(200).send({ success: true, nftMintAddress: realMintPublicKey });
       }
 
-      return reply.code(200).send({ success: true, nftMintAddress: mintPublicKey });
+      // Verify collection membership server-side — fire-and-forget.
+      void verifyCollectionMembership(realMintPublicKey);
+
+      // Pre-warm the image cache so the first marketplace/game fetch is instant.
+      void (async () => {
+        try {
+          const seed = creatureSeed(wallet, badgeId, seedSalt);
+          const [{ gif }, { png }] = await Promise.all([
+            import('../lib/creature.js').then(m => m.generateCreatureGif(seed, badgeId)),
+            import('../lib/creature.js').then(m => m.generateCreaturePng(seed, badgeId)),
+          ]);
+          await Promise.all([
+            redis.setex(`creature:gif:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, gif as unknown as string),
+            redis.setex(`creature:png:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, png as unknown as string),
+          ]);
+        } catch { /* non-fatal */ }
+      })();
+
+      return reply.code(200).send({ success: true, nftMintAddress: realMintPublicKey });
     },
   );
 }
@@ -513,7 +606,7 @@ export async function perksRoutes(fastify: FastifyInstance) {
   // POST /api/v1/perks/:id/claim
   fastify.post('/api/v1/perks/:id/claim', async (request, reply) => {
     const wallet = request.user.sub;
-    const { id: perkId } = request.params as { id: string };
+    const { id: perkId } = z.object({ id: z.string().uuid() }).parse(request.params);
     const perkClaimSchema = z.object({ proofSignature: z.string().optional() });
     const body = perkClaimSchema.parse(request.body ?? {});
 
@@ -542,8 +635,7 @@ export async function perksRoutes(fastify: FastifyInstance) {
 
     if (existingClaim) {
       if (perk.rewardType === 'STREAK_SHIELD' && !user.streakShieldActive) {
-        // Shield was consumed -- allow re-claim by deleting old claim
-        await db.delete(perkClaims).where(eq(perkClaims.id, existingClaim.id));
+        // Shield was consumed -- re-claim is handled atomically inside the transaction below
       } else {
         return reply.code(409).send({ error: 'ALREADY_CLAIMED' });
       }
@@ -584,6 +676,14 @@ export async function perksRoutes(fastify: FastifyInstance) {
           throw new Error('SOLD_OUT');
         }
 
+        // For STREAK_SHIELD re-claims: atomically delete the old claim before inserting the
+        // new one. Doing this inside the transaction prevents the race where two concurrent
+        // requests both see the shield consumed, both delete outside the tx, and both try
+        // to insert — which would hit the UNIQUE(user_id, perk_id) constraint.
+        if (existingClaim) {
+          await tx.delete(perkClaims).where(eq(perkClaims.id, existingClaim.id));
+        }
+
         const [record] = await tx
           .insert(perkClaims)
           .values({
@@ -594,10 +694,14 @@ export async function perksRoutes(fastify: FastifyInstance) {
           })
           .returning();
 
-        await tx
-          .update(perks)
-          .set({ claimedCount: sql`${perks.claimedCount} + 1` })
-          .where(eq(perks.id, perkId));
+        // Only count first-time claims against the supply; re-claims are replace-in-place
+        // (old row deleted, new row inserted) so the net supply change is zero.
+        if (!existingClaim) {
+          await tx
+            .update(perks)
+            .set({ claimedCount: sql`${perks.claimedCount} + 1` })
+            .where(eq(perks.id, perkId));
+        }
 
         // If this is a STREAK_SHIELD perk, activate the shield on the user
         if (perk.rewardType === 'STREAK_SHIELD') {

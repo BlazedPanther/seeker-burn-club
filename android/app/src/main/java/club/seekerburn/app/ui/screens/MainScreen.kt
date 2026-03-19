@@ -108,7 +108,7 @@ fun MainScreen(
                 NavigationBarItem(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    icon = { Image(painter = painterResource(R.mipmap.ic_launcher_foreground), contentDescription = "Home", modifier = Modifier.size(28.dp)) },
+                    icon = { Image(painter = painterResource(R.mipmap.ic_launcher_foreground), contentDescription = "Home", modifier = Modifier.size(32.dp)) },
                     label = { Text("Home") },
                     colors = navItemColors,
                 )

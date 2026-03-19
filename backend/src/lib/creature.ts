@@ -12,6 +12,7 @@
  */
 
 import { GifWriter } from 'omggif';
+import { deflateSync } from 'zlib';
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // PRNG + Hash
@@ -167,8 +168,13 @@ class PalBuilder {
     return this.map.get(key)!;
   }
   finalize(): number[] {
+    // Guard: GIF supports max 256 colors — truncate if overflow
+    if (this.colors.length > 256) {
+      console.warn(`[creature] Palette overflow (${this.colors.length} unique colors), truncating to 256`);
+      this.colors.length = 256;
+    }
     let s = 2;
-    while (s < this.colors.length && s < 256) s *= 2;
+    while (s < this.colors.length) s *= 2;
     while (this.colors.length < s) this.colors.push(0);
     return this.colors;
   }
@@ -244,6 +250,7 @@ const BODY_SHAPES: TraitDef[] = [
   { id: 'pear',     name: 'Pear Spirit',    rarity: 'common' },
   { id: 'star_body', name: 'Star Spirit',   rarity: 'uncommon' },
   { id: 'mushroom_body', name: 'Mushroom Spirit', rarity: 'rare' },
+  { id: 'void_form', name: 'Void Form',     rarity: 'mythic' },
 ];
 
 const COLOR_PALETTES: ColorPalDef[] = [
@@ -276,6 +283,7 @@ const COLOR_PALETTES: ColorPalDef[] = [
   { id: 'hell',       body: '#cc2200', dark: '#881100', light: '#ff6040', highlight: '#ffaa40', bg: '#180800', name: 'Hellfire',    rarity: 'legendary' },
   { id: 'bubblegum',  body: '#ff69b4', dark: '#cc3388', light: '#ff99cc', highlight: '#ffccee', bg: '#2a0e1e', name: 'Bubblegum',   rarity: 'uncommon' },
   { id: 'midnight',   body: '#1a1a6e', dark: '#0a0a3e', light: '#3a3aae', highlight: '#7070ee', bg: '#06061a', name: 'Midnight',    rarity: 'rare' },
+  { id: 'prismatic',  body: '#ff00ff', dark: '#6000cc', light: '#00ffff', highlight: '#ffff00', bg: '#060010', name: 'Prismatic',   rarity: 'mythic' },
 ];
 
 const EYES: TraitDef[] = [
@@ -306,6 +314,7 @@ const EYES: TraitDef[] = [
   { id: 'glitch_eyes', name: 'Glitch Eyes',     rarity: 'legendary' },
   { id: 'cat_eyes',    name: 'Cat Eyes',        rarity: 'uncommon' },
   { id: 'cyclops',     name: 'Cyclops Eye',     rarity: 'epic' },
+  { id: 'cosmos_eyes', name: 'Cosmos Eyes',     rarity: 'mythic' },
 ];
 
 const MOUTHS: TraitDef[] = [
@@ -337,6 +346,7 @@ const MOUTHS: TraitDef[] = [
   { id: 'diamond_grill', name: 'Diamond Grill', rarity: 'legendary' },
   { id: 'snarl',     name: 'Snarl',          rarity: 'uncommon' },
   { id: 'buck_teeth', name: 'Buck Teeth',    rarity: 'common' },
+  { id: 'singularity_mouth', name: 'Singularity', rarity: 'mythic' },
 ];
 
 const HEADGEAR: TraitDef[] = [
@@ -367,6 +377,7 @@ const HEADGEAR: TraitDef[] = [
   { id: 'afro',       name: 'Afro',          rarity: 'rare' },
   { id: 'viking',     name: 'Viking Helm',   rarity: 'epic' },
   { id: 'astronaut',  name: 'Space Helmet',  rarity: 'legendary' },
+  { id: 'titan_crown', name: 'Titan Crown',  rarity: 'mythic' },
 ];
 
 const HELD_ITEMS: TraitDef[] = [
@@ -399,6 +410,7 @@ const HELD_ITEMS: TraitDef[] = [
   { id: 'hammer',     name: 'Hammer',         rarity: 'uncommon' },
   { id: 'dagger',     name: 'Dagger',         rarity: 'rare' },
   { id: 'chalice',    name: 'Golden Chalice', rarity: 'legendary' },
+  { id: 'void_blade', name: 'Void Blade',     rarity: 'mythic' },
 ];
 
 const BACKGROUNDS: TraitDef[] = [
@@ -408,9 +420,9 @@ const BACKGROUNDS: TraitDef[] = [
   { id: 'grid',       name: 'Pixel Grid',          rarity: 'uncommon' },
   { id: 'rain',       name: 'Rainstorm',           rarity: 'uncommon' },
   { id: 'diamonds',   name: 'Diamonds',            rarity: 'uncommon' },
-  { id: 'waves',      name: 'Ocean Waves',         rarity: 'rare' },
-  { id: 'circuit',    name: 'Circuit Board',       rarity: 'rare' },
-  { id: 'swirl',      name: 'Energy Swirl',        rarity: 'rare' },
+  { id: 'waves',      name: 'Ocean Waves',         rarity: 'uncommon' },
+  { id: 'circuit',    name: 'Circuit Board',       rarity: 'uncommon' },
+  { id: 'swirl',      name: 'Energy Swirl',        rarity: 'uncommon' },
   // â”€â”€ Scene backgrounds (detailed pixel-art worlds) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   { id: 'volcano',    name: 'Volcanic Lair',       rarity: 'rare' },
   { id: 'underwater', name: 'Deep Ocean',          rarity: 'rare' },
@@ -465,6 +477,7 @@ const PATTERNS: TraitDef[] = [
   { id: 'runes_pat',  name: 'Ancient Runes',  rarity: 'rare' },
   { id: 'glitch_pat', name: 'Glitch Pattern', rarity: 'epic' },
   { id: 'lava_pat',   name: 'Lava Veins',     rarity: 'rare' },
+  { id: 'void_fractal', name: 'Void Fractal', rarity: 'mythic' },
 ];
 
 // â”€â”€ NEW TRAIT: Aura Effect (particles around body) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -492,6 +505,7 @@ const AURAS: TraitDef[] = [
   { id: 'dark_fire',   name: 'Dark Fire',       rarity: 'epic' },
   { id: 'solar',       name: 'Solar Flare',     rarity: 'legendary' },
   { id: 'void_aura',   name: 'Void Rift',       rarity: 'legendary' },
+  { id: 'transcendence_aura', name: 'Transcendence', rarity: 'mythic' },
 ];
 
 // â”€â”€ NEW TRAIT: Animation Style (how the creature moves) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -520,6 +534,7 @@ const ANIMATIONS: TraitDef[] = [
   { id: 'phase',      name: 'Phase Shift',   rarity: 'epic' },
   { id: 'warp',       name: 'Warp',          rarity: 'epic' },
   { id: 'ascend',     name: 'Ascend',        rarity: 'legendary' },
+  { id: 'genesis',    name: 'Genesis',       rarity: 'mythic' },
 ];
 
 // â”€â”€ NEW TRAIT: Companion Pet (small sidekick creature) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -550,6 +565,7 @@ const COMPANIONS: TraitDef[] = [
   { id: 'golem',      name: 'Crystal Golem', rarity: 'epic' },
   { id: 'wisp',       name: 'Will-o-Wisp',  rarity: 'rare' },
   { id: 'unicorn',    name: 'Mini Unicorn',  rarity: 'legendary' },
+  { id: 'ancient_dragon', name: 'Ancient Dragon', rarity: 'mythic' },
 ];
 
 // â”€â”€ NEW TRAIT: Outline / Border Effect â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -577,6 +593,7 @@ const OUTLINES: TraitDef[] = [
   { id: 'drip_out',    name: 'Dripping',       rarity: 'epic' },
   { id: 'toxic_out',   name: 'Toxic Glow',     rarity: 'epic' },
   { id: 'holo_out',    name: 'Holographic',    rarity: 'legendary' },
+  { id: 'void_border', name: 'Void Border',    rarity: 'mythic' },
 ];
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -587,6 +604,21 @@ const RARITY_WEIGHTS: Record<CreatureRarity, number> = {
   common: 40, uncommon: 25, rare: 18, epic: 10, legendary: 5, mythic: 2,
 };
 const RARITY_ORDER: CreatureRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
+
+/**
+ * Per-tier trait weight tables. Higher badge tiers bias weightedPick() toward rarer
+ * traits, so the visual quality of creatures visually reflects badge difficulty.
+ * A mythic badge creature will have mostly legendary/mythic traits; a rare badge
+ * creature will tend toward rare/epic traits, etc.
+ */
+const TRAIT_WEIGHTS_BY_TIER: Record<CreatureRarity, Record<CreatureRarity, number>> = {
+  common:    { common: 40, uncommon: 25, rare: 18, epic: 10, legendary:  5, mythic:  2 },
+  uncommon:  { common: 28, uncommon: 32, rare: 22, epic: 12, legendary:  4, mythic:  2 },
+  rare:      { common: 12, uncommon: 22, rare: 34, epic: 20, legendary:  8, mythic:  4 },
+  epic:      { common:  4, uncommon: 12, rare: 26, epic: 32, legendary: 18, mythic:  8 },
+  legendary: { common:  1, uncommon:  5, rare: 14, epic: 26, legendary: 36, mythic: 18 },
+  mythic:    { common:  0, uncommon:  2, rare:  8, epic: 16, legendary: 30, mythic: 44 },
+};
 
 interface BadgeRarityProfile {
   minRarity: CreatureRarity;
@@ -601,40 +633,57 @@ interface BadgeRarityProfile {
  * This keeps milestone progression meaningful without forcing 100% guaranteed top tiers.
  */
 const BADGE_RARITY_PROFILE: Record<string, BadgeRarityProfile> = {
-  // Streak low-tier (gentle nudge toward uncommon/rare)
-  STREAK_7:    { minRarity: 'uncommon', scoreBoost: 0.05, floorChance: 0.30 },
-  STREAK_14:   { minRarity: 'uncommon', scoreBoost: 0.08, floorChance: 0.35 },
-  STREAK_21:   { minRarity: 'uncommon', scoreBoost: 0.10, floorChance: 0.40 },
-  STREAK_30:   { minRarity: 'rare',     scoreBoost: 0.12, floorChance: 0.20 },
-  STREAK_60:   { minRarity: 'rare',     scoreBoost: 0.15, floorChance: 0.25 },
-  STREAK_90:   { minRarity: 'rare',     scoreBoost: 0.18, floorChance: 0.30 },
-  STREAK_180:  { minRarity: 'rare',     scoreBoost: 0.20, floorChance: 0.35 },
-  STREAK_365:  { minRarity: 'epic',     scoreBoost: 0.30, floorChance: 0.25 },
-  // Streak mega-tiers
-  STREAK_500:  { minRarity: 'rare',      scoreBoost: 0.20, floorChance: 0.45 },
-  STREAK_730:  { minRarity: 'epic',      scoreBoost: 0.45, floorChance: 0.40 },
-  STREAK_1000: { minRarity: 'legendary', scoreBoost: 0.58, floorChance: 0.24 },
-  STREAK_1500: { minRarity: 'mythic',    scoreBoost: 0.82, floorChance: 0.16 },
-  // Lifetime low-tier
-  BURN_100:    { minRarity: 'uncommon', scoreBoost: 0.04, floorChance: 0.25 },
-  BURN_500:    { minRarity: 'uncommon', scoreBoost: 0.08, floorChance: 0.30 },
-  BURN_1000:   { minRarity: 'rare',     scoreBoost: 0.12, floorChance: 0.20 },
-  // Lifetime mega-tiers
-  BURN_2500:    { minRarity: 'rare',      scoreBoost: 0.22, floorChance: 0.48 },
-  BURN_5000:    { minRarity: 'epic',      scoreBoost: 0.46, floorChance: 0.42 },
-  BURN_10000:   { minRarity: 'epic',      scoreBoost: 0.52, floorChance: 0.46 },
-  BURN_25000:   { minRarity: 'legendary', scoreBoost: 0.60, floorChance: 0.26 },
-  BURN_50000:   { minRarity: 'legendary', scoreBoost: 0.68, floorChance: 0.30 },
-  BURN_100000:  { minRarity: 'mythic',    scoreBoost: 0.86, floorChance: 0.14 },
-  BURN_250000:  { minRarity: 'mythic',    scoreBoost: 0.92, floorChance: 0.16 },
-  BURN_500000:  { minRarity: 'mythic',    scoreBoost: 0.98, floorChance: 0.18 },
-  BURN_1000000: { minRarity: 'mythic',    scoreBoost: 1.05, floorChance: 0.22 },
+  // ── Streak badges (floorChance strictly increases with tier) ──────────────
+  // scoreBoost now smaller because TRAIT_WEIGHTS_BY_TIER handles visual quality;
+  // floorChance is the reliable safety-net guarantee.
+  STREAK_7:    { minRarity: 'uncommon', scoreBoost: 0.05, floorChance: 0.50 },
+  STREAK_14:   { minRarity: 'uncommon', scoreBoost: 0.08, floorChance: 0.55 },
+  STREAK_21:   { minRarity: 'uncommon', scoreBoost: 0.10, floorChance: 0.60 },
+  STREAK_30:   { minRarity: 'rare',     scoreBoost: 0.12, floorChance: 0.65 },
+  STREAK_60:   { minRarity: 'rare',     scoreBoost: 0.15, floorChance: 0.70 },
+  STREAK_90:   { minRarity: 'rare',     scoreBoost: 0.18, floorChance: 0.73 },
+  STREAK_180:  { minRarity: 'rare',     scoreBoost: 0.20, floorChance: 0.76 },
+  STREAK_365:  { minRarity: 'epic',     scoreBoost: 0.22, floorChance: 0.82 },
+  STREAK_500:  { minRarity: 'epic',     scoreBoost: 0.25, floorChance: 0.86 },
+  STREAK_730:  { minRarity: 'epic',     scoreBoost: 0.28, floorChance: 0.90 },
+  STREAK_1000: { minRarity: 'legendary', scoreBoost: 0.35, floorChance: 0.93 },
+  STREAK_1500: { minRarity: 'mythic',    scoreBoost: 0.50, floorChance: 0.97 },
+  // ── Lifetime burn badges (monotonically increasing) ──────────────────────
+  BURN_100:    { minRarity: 'uncommon', scoreBoost: 0.04, floorChance: 0.50 },
+  BURN_500:    { minRarity: 'uncommon', scoreBoost: 0.08, floorChance: 0.55 },
+  BURN_1000:   { minRarity: 'rare',     scoreBoost: 0.12, floorChance: 0.65 },
+  BURN_2500:   { minRarity: 'rare',     scoreBoost: 0.18, floorChance: 0.74 },
+  BURN_5000:   { minRarity: 'epic',     scoreBoost: 0.22, floorChance: 0.83 },
+  BURN_10000:  { minRarity: 'epic',     scoreBoost: 0.25, floorChance: 0.88 },
+  BURN_25000:  { minRarity: 'legendary', scoreBoost: 0.35, floorChance: 0.92 },
+  BURN_50000:  { minRarity: 'legendary', scoreBoost: 0.40, floorChance: 0.94 },
+  BURN_100000: { minRarity: 'mythic',    scoreBoost: 0.50, floorChance: 0.95 },
+  BURN_250000: { minRarity: 'mythic',    scoreBoost: 0.55, floorChance: 0.96 },
+  BURN_500000: { minRarity: 'mythic',    scoreBoost: 0.60, floorChance: 0.97 },
+  BURN_1000000:{ minRarity: 'mythic',    scoreBoost: 0.70, floorChance: 0.99 },
+  // ── Daily volume badges ───────────────────────────────────────────────────
+  DAILY_25:    { minRarity: 'common',    scoreBoost: 0.02, floorChance: 0.30 },
+  DAILY_100:   { minRarity: 'uncommon',  scoreBoost: 0.08, floorChance: 0.55 },
+  DAILY_500:   { minRarity: 'rare',      scoreBoost: 0.18, floorChance: 0.72 },
+  DAILY_2500:  { minRarity: 'epic',      scoreBoost: 0.28, floorChance: 0.87 },
+  DAILY_10000: { minRarity: 'legendary', scoreBoost: 0.40, floorChance: 0.93 },
+  // ── Transaction count badges ──────────────────────────────────────────────
+  TXCOUNT_10:  { minRarity: 'common',    scoreBoost: 0.02, floorChance: 0.30 },
+  TXCOUNT_50:  { minRarity: 'uncommon',  scoreBoost: 0.06, floorChance: 0.52 },
+  TXCOUNT_100: { minRarity: 'uncommon',  scoreBoost: 0.10, floorChance: 0.58 },
+  TXCOUNT_500: { minRarity: 'rare',      scoreBoost: 0.20, floorChance: 0.74 },
+  TXCOUNT_1000:{ minRarity: 'epic',      scoreBoost: 0.26, floorChance: 0.86 },
+  // ── Perfect month badges (hardest achievements) ───────────────────────────
+  PERFECT_1:   { minRarity: 'rare',      scoreBoost: 0.18, floorChance: 0.74 },
+  PERFECT_3:   { minRarity: 'epic',      scoreBoost: 0.26, floorChance: 0.87 },
+  PERFECT_6:   { minRarity: 'legendary', scoreBoost: 0.38, floorChance: 0.93 },
+  PERFECT_12:  { minRarity: 'mythic',    scoreBoost: 0.55, floorChance: 0.98 },
 };
 
-function weightedPick<T extends TraitDef>(items: T[], rand: () => number): T {
-  // Tier-first selection: pick a rarity tier using RARITY_WEIGHTS, then uniformly
-  // pick a trait within that tier. This guarantees the rarity distribution matches
-  // the configured weights regardless of how many traits exist per tier.
+function weightedPick<T extends TraitDef>(items: T[], rand: () => number, weights?: Record<CreatureRarity, number>): T {
+  // Tier-first selection: pick a rarity tier, then uniformly pick within that tier.
+  // Accepts optional custom weight table (TRAIT_WEIGHTS_BY_TIER) for badge-aware picks;
+  // falls back to RARITY_WEIGHTS for badge-less creatures.
   const tierBuckets = new Map<CreatureRarity, T[]>();
   for (const item of items) {
     const bucket = tierBuckets.get(item.rarity);
@@ -646,7 +695,7 @@ function weightedPick<T extends TraitDef>(items: T[], rand: () => number): T {
   const availableTiers: { rarity: CreatureRarity; weight: number; items: T[] }[] = [];
   let totalWeight = 0;
   for (const [rarity, bucket] of tierBuckets) {
-    const w = RARITY_WEIGHTS[rarity] ?? 10;
+    const w = (weights ?? RARITY_WEIGHTS)[rarity] ?? 10;
     availableTiers.push({ rarity, weight: w, items: bucket });
     totalWeight += w;
   }
@@ -1424,6 +1473,28 @@ function drawBody(canvas: Canvas, bodyDef: TraitDef, pal: ColorPalDef, palObj: P
       canvas.rect(cx - 5, baseY + 11, 4, 3, darkC); canvas.rect(cx + 1, baseY + 11, 4, 3, darkC);
       break;
     }
+    case 'void_form': {
+      // Mythic: hollow void entity with crackling energy fractures
+      const vfC = palObj.add('#4020a0'), vfHL = palObj.add('#8040ff'), vfGlow = palObj.add('#c080ff');
+      const vfDark = palObj.add('#100020');
+      // Hollow shell ring
+      for (let dy = -10; dy <= 10; dy++) {
+        const hw = Math.round(10 - Math.abs(dy) * 0.4);
+        for (let dx = -hw; dx <= hw; dx++) {
+          const dist = Math.round(Math.sqrt(dx * dx + dy * dy));
+          if (dist >= 7 && dist <= 10) canvas.set(cx + dx, baseY + dy, vfC);
+          else if (dist < 7 && dist >= 5) canvas.set(cx + dx, baseY + dy, vfDark);
+        }
+      }
+      // Energy fracture lines
+      canvas.line(cx - 3, baseY - 5, cx + 2, baseY + 3, vfHL);
+      canvas.line(cx + 3, baseY - 4, cx - 2, baseY + 4, vfHL);
+      // Glow center
+      canvas.set(cx, baseY, vfGlow); canvas.set(cx - 1, baseY - 1, vfGlow);
+      // Tendrils (feet)
+      canvas.rect(cx - 9, baseY + 9, 3, 3, vfDark); canvas.rect(cx + 6, baseY + 9, 3, 3, vfDark);
+      break;
+    }
 
   }
 }
@@ -1631,6 +1702,22 @@ function drawEyes(canvas: Canvas, eyeDef: TraitDef, pal: ColorPalDef, palObj: Pa
       canvas.set(cx + 1, baseY - 1, palObj.add('#ffffff'));
       break;
     }
+    case 'cosmos_eyes': {
+      // Mythic: deep-space star-field eyes with nebula glow
+      const nebC = palObj.add('#0a0020'), starC = palObj.add(0xffffff), nebHL = palObj.add('#4010a0');
+      const cosmicGlow = palObj.add('#8040ff');
+      for (const ox of [-4, 4]) {
+        canvas.rect(cx + ox - 1, baseY - 1, 3, 3, nebC);
+        canvas.set(cx + ox, baseY, starC);
+        canvas.set(cx + ox - 1, baseY - 1, nebHL);
+        canvas.set(cx + ox + 1, baseY + 1, nebHL);
+      }
+      if (frame % 4 < 2) {
+        canvas.set(cx - 5, baseY - 1, cosmicGlow);
+        canvas.set(cx + 5, baseY + 1, cosmicGlow);
+      }
+      break;
+    }
   }
 }
 
@@ -1796,6 +1883,19 @@ function drawMouth(canvas: Canvas, mouthDef: TraitDef, pal: ColorPalDef, palObj:
       canvas.line(cx - 2, baseY, cx + 2, baseY, black);
       canvas.set(cx - 1, baseY + 1, palObj.add('#ffffff')); canvas.set(cx, baseY + 1, palObj.add('#ffffff'));
       canvas.set(cx - 1, baseY + 2, palObj.add('#ffffff')); canvas.set(cx, baseY + 2, palObj.add('#ffffff'));
+      break;
+    }
+    case 'singularity_mouth': {
+      // Mythic: black hole singularity mouth
+      const smDark = palObj.add('#050010'), smC = palObj.add('#4010a0'), smHL = palObj.add('#8040ff');
+      canvas.rect(cx - 3, baseY - 1, 6, 4, smDark);
+      canvas.set(cx - 3, baseY - 1, smC); canvas.set(cx + 2, baseY - 1, smC);
+      canvas.set(cx - 3, baseY + 2, smC); canvas.set(cx + 2, baseY + 2, smC);
+      const swirl = frame % 4;
+      if (swirl === 0) { canvas.set(cx - 1, baseY, smHL); canvas.set(cx + 1, baseY + 1, smHL); }
+      else if (swirl === 1) { canvas.set(cx, baseY - 1, smHL); canvas.set(cx - 1, baseY + 1, smHL); }
+      else if (swirl === 2) { canvas.set(cx + 1, baseY, smHL); canvas.set(cx - 1, baseY - 1, smHL); }
+      else { canvas.set(cx, baseY + 1, smHL); canvas.set(cx + 1, baseY - 1, smHL); }
       break;
     }
 
@@ -1974,6 +2074,24 @@ function drawHeadgear(canvas: Canvas, headDef: TraitDef, pal: ColorPalDef, palOb
       canvas.circle(cx, topY + 1, 7, glassC);
       canvas.set(cx - 3, topY - 2, palObj.add('#ffffff')); // visor reflection
       canvas.set(cx - 2, topY - 3, palObj.add('#ffffff'));
+      break;
+    }
+    case 'titan_crown': {
+      // Mythic: massive multi-spiked crown with gems
+      const crownC = palObj.add('#ffd700'), crownDk = palObj.add('#b8860b');
+      const gem1 = palObj.add('#ff2060'), gem2 = palObj.add('#4080ff');
+      // Crown base band
+      canvas.rect(cx - 8, topY, 16, 3, crownC);
+      canvas.rect(cx - 7, topY + 1, 14, 1, crownDk);
+      // 5 spikes of varying heights
+      const spikes = [-7, -4, 0, 4, 7];
+      const heights = [5, 7, 9, 7, 5];
+      for (let i = 0; i < spikes.length; i++) {
+        canvas.line(cx + spikes[i], topY - 1, cx + spikes[i], topY - heights[i], crownC);
+        canvas.set(cx + spikes[i], topY - heights[i], palObj.add(0xffffff));
+      }
+      // Gems on crown
+      canvas.set(cx - 4, topY + 1, gem1); canvas.set(cx, topY + 1, gem2); canvas.set(cx + 4, topY + 1, gem1);
       break;
     }
   }
@@ -2171,6 +2289,23 @@ function drawHeldItem(canvas: Canvas, itemDef: TraitDef, pal: ColorPalDef, palOb
       canvas.set(right + 1, baseY - 4, jewC);
       canvas.rect(right, baseY - 1, 2, 2, stemC);
       canvas.rect(right - 1, baseY + 1, 4, 1, stemC);
+      break;
+    }
+    case 'void_blade': {
+      // Mythic: void-energy blade with pulsing core
+      const vbC = palObj.add('#4010a0'), vbEdge = palObj.add('#c080ff'), vbCore = palObj.add(0xffffff);
+      // Blade (two-tone)
+      canvas.line(right, baseY + 2, right, baseY - 9, vbC);
+      canvas.line(right - 1, baseY + 2, right - 1, baseY - 9, vbEdge);
+      if (frame % 4 < 2) canvas.set(right, baseY - 4, vbCore);
+      // Crossguard
+      canvas.rect(right - 2, baseY + 2, 5, 2, vbC);
+      canvas.set(right + 2, baseY + 1, vbEdge);
+      // Void particles
+      if (frame % 6 < 3) {
+        canvas.set(right + 2, baseY - 6, vbEdge);
+        canvas.set(right - 2, baseY - 3, vbEdge);
+      }
       break;
     }
 
@@ -2374,6 +2509,21 @@ function drawPattern(canvas: Canvas, patternDef: TraitDef, pal: ColorPalDef, pal
         }
       }
       break;
+    case 'void_fractal': {
+      // Mythic: recursive fractal void pattern
+      const vfpHL = palObj.add('#8040ff'), vfpGlow = palObj.add('#c080ff');
+      const points: [number, number][] = [
+        [0, 0], [-4, -4], [4, -4], [-4, 4], [4, 4],
+        [-8, 0], [8, 0], [0, -8], [0, 8],
+      ];
+      for (const [px, py] of points) {
+        const dist = Math.sqrt(px * px + py * py);
+        const col = dist === 0 ? vfpGlow : dist < 6 ? vfpHL : pc;
+        const ax = cx + px, ay = baseY + py;
+        if ((ax - cx) ** 2 + (ay - baseY) ** 2 < 100) canvas.set(ax, ay, col);
+      }
+      break;
+    }
 
   }
 }
@@ -2644,6 +2794,31 @@ function drawAura(canvas: Canvas, auraDef: TraitDef, pal: ColorPalDef, palObj: P
       }
       break;
     }
+    case 'transcendence_aura': {
+      // Mythic: full-spectrum dual counter-rotating rings
+      const taColors = [
+        palObj.add('#ff0000'), palObj.add('#ff8000'), palObj.add('#ffff00'), palObj.add('#00ff00'),
+        palObj.add('#00ffff'), palObj.add('#0080ff'), palObj.add('#8000ff'), palObj.add('#ff0080'),
+      ];
+      const numColors = taColors.length;
+      // Outer ring
+      for (let i = 0; i < 24; i++) {
+        const angle = (i / 24) * Math.PI * 2 + t * Math.PI * 2;
+        const ox = Math.round(cx + Math.cos(angle) * 15);
+        const oy = Math.round(baseY + Math.sin(angle) * 15);
+        if (ox >= 0 && ox < canvas.w && oy >= 0 && oy < canvas.h)
+          canvas.set(ox, oy, taColors[(i + frame) % numColors]);
+      }
+      // Inner ring (counter-rotating)
+      for (let i = 0; i < 16; i++) {
+        const angle = (i / 16) * Math.PI * 2 - t * Math.PI * 3;
+        const ix = Math.round(cx + Math.cos(angle) * 11);
+        const iy = Math.round(baseY + Math.sin(angle) * 11);
+        if (ix >= 0 && ix < canvas.w && iy >= 0 && iy < canvas.h)
+          canvas.set(ix, iy, taColors[(i + frame * 2) % numColors]);
+      }
+      break;
+    }
 
   }
 }
@@ -2762,6 +2937,13 @@ function computeAnimation(animDef: TraitDef, frame: number, totalFrames: number)
         bounceY: Math.round(-1.5 + Math.sin(t * Math.PI * 2) * 2),
         offsetX: Math.round(Math.sin(t * Math.PI * 3) * 3),
       };
+    case 'genesis': {
+      // Mythic: dramatic creation emergence — rise from void, hover, radiate
+      const phase = t % 1;
+      const riseAmt = phase < 0.4 ? Math.round(-10 * (1 - phase / 0.4)) : -10;
+      const wobble = phase > 0.4 ? Math.round(Math.sin((phase - 0.4) / 0.6 * Math.PI * 6) * 1.5) : 0;
+      return { bounceY: riseAmt + wobble, offsetX: 0 };
+    }
     default:
       return { bounceY: Math.round(Math.sin(t * Math.PI * 2) * 1.5), offsetX: 0 };
   }
@@ -3049,6 +3231,28 @@ function drawCompanion(canvas: Canvas, compDef: TraitDef, pal: ColorPalDef, palO
       if (frame % 6 < 3) canvas.set(cx + 2, cy + 1, palObj.add('#ffff80'));
       break;
     }
+    case 'ancient_dragon': {
+      // Mythic: ancient dragon companion
+      const drC = palObj.add('#1a4020'), drScale = palObj.add('#2a6030');
+      const drEye = palObj.add('#ff4000'), drFire = palObj.add('#ff8000');
+      // Dragon body
+      canvas.set(cx, cy, drC); canvas.set(cx - 1, cy, drC); canvas.set(cx + 1, cy, drC);
+      canvas.set(cx, cy + 1, drC); canvas.set(cx - 1, cy + 1, drC);
+      // Head
+      canvas.set(cx + 1, cy - 1, drC); canvas.set(cx + 2, cy - 1, drC); canvas.set(cx + 2, cy, drC);
+      canvas.set(cx + 3, cy - 1, drC); // snout
+      // Eye
+      canvas.set(cx + 2, cy - 2, drEye);
+      // Wing
+      const drWingY = Math.sin(t * Math.PI * 4) > 0 ? -1 : 0;
+      canvas.set(cx - 2, cy - 1 + drWingY, drScale); canvas.set(cx - 3, cy - 2 + drWingY, drScale);
+      canvas.set(cx - 2, cy + drWingY, drScale);
+      // Fire breath
+      if (frame % 6 < 3) {
+        canvas.set(cx + 4, cy - 1, drFire); canvas.set(cx + 5, cy - 2, palObj.add('#ffff40'));
+      }
+      break;
+    }
 
   }
 }
@@ -3233,6 +3437,23 @@ function drawOutline(canvas: Canvas, outlineDef: TraitDef, pal: ColorPalDef, pal
       }
       break;
     }
+    case 'void_border': {
+      // Mythic: pulsing tricolor void border
+      const vbColors = [palObj.add('#4010a0'), palObj.add('#8040ff'), palObj.add('#c080ff')];
+      const pulse = Math.round(t * edges.length);
+      for (let i = 0; i < edges.length; i++) {
+        const [x, y] = edges[i];
+        const ci = (i + pulse) % 3;
+        canvas.set(x, y, vbColors[ci]);
+        // Outer void glow
+        for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+          const nx = x + dx, ny = y + dy;
+          if (!bodyPixels.has(`${nx},${ny}`) && nx >= 0 && nx < canvas.w && ny >= 0 && ny < canvas.h)
+            if (i % 7 < 2) canvas.set(nx, ny, vbColors[(ci + 1) % 3]);
+        }
+      }
+      break;
+    }
 
   }
 }
@@ -3269,27 +3490,41 @@ export interface CreatureTraits {
   rarity: CreatureRarity;
 }
 
-/** Resolve traits from a seed without rendering. Used for metadata. */
-export function resolveTraits(seed: number, badgeId?: string): CreatureTraits {
-  const profile = badgeId ? BADGE_RARITY_PROFILE[badgeId] : undefined;
-  const rand = mulberry32(seed);
-  const bodyDef = weightedPick(BODY_SHAPES, rand);
-  const colorPal = weightedPick(COLOR_PALETTES, rand);
-  const eyeDef = weightedPick(EYES, rand);
-  const mouthDef = weightedPick(MOUTHS, rand);
-  const headDef = weightedPick(HEADGEAR, rand);
-  const itemDef = weightedPick(HELD_ITEMS, rand);
-  const bgDef = weightedPick(BACKGROUNDS, rand);
-  const patternDef = weightedPick(PATTERNS, rand);
-  const auraDef = weightedPick(AURAS, rand);
-  const animDef = weightedPick(ANIMATIONS, rand);
-  const compDef = weightedPick(COMPANIONS, rand);
-  const outlineDef = weightedPick(OUTLINES, rand);
+interface PickedTraitDefs {
+  bodyDef: TraitDef; colorPal: ColorPalDef; eyeDef: TraitDef; mouthDef: TraitDef;
+  headDef: TraitDef; itemDef: TraitDef; bgDef: TraitDef; patternDef: TraitDef;
+  auraDef: TraitDef; animDef: TraitDef; compDef: TraitDef; outlineDef: TraitDef;
+  rarity: CreatureRarity;
+}
+
+/** Pick all 12 traits using badge-aware rarity weights + compute overall rarity. */
+function pickAllTraits(rand: () => number, profile: BadgeRarityProfile | undefined): PickedTraitDefs {
+  const traitWeights = profile ? TRAIT_WEIGHTS_BY_TIER[profile.minRarity] : RARITY_WEIGHTS;
+  const bodyDef    = weightedPick(BODY_SHAPES,    rand, traitWeights) as TraitDef;
+  const colorPal   = weightedPick(COLOR_PALETTES,  rand, traitWeights) as ColorPalDef;
+  const eyeDef     = weightedPick(EYES,            rand, traitWeights) as TraitDef;
+  const mouthDef   = weightedPick(MOUTHS,          rand, traitWeights) as TraitDef;
+  const headDef    = weightedPick(HEADGEAR,        rand, traitWeights) as TraitDef;
+  const itemDef    = weightedPick(HELD_ITEMS,      rand, traitWeights) as TraitDef;
+  const bgDef      = weightedPick(BACKGROUNDS,     rand, traitWeights) as TraitDef;
+  const patternDef = weightedPick(PATTERNS,        rand, traitWeights) as TraitDef;
+  const auraDef    = weightedPick(AURAS,           rand, traitWeights) as TraitDef;
+  const animDef    = weightedPick(ANIMATIONS,      rand, traitWeights) as TraitDef;
+  const compDef    = weightedPick(COMPANIONS,      rand, traitWeights) as TraitDef;
+  const outlineDef = weightedPick(OUTLINES,        rand, traitWeights) as TraitDef;
   const rarity = computeRarity(
     [bodyDef, colorPal, eyeDef, mouthDef, headDef, itemDef, bgDef, patternDef, auraDef, animDef, compDef, outlineDef],
     profile,
     rand(),
   );
+  return { bodyDef, colorPal, eyeDef, mouthDef, headDef, itemDef, bgDef, patternDef, auraDef, animDef, compDef, outlineDef, rarity };
+}
+
+/** Resolve traits from a seed without rendering. Used for metadata. */
+export function resolveTraits(seed: number, badgeId?: string): CreatureTraits {
+  const profile = badgeId ? BADGE_RARITY_PROFILE[badgeId] : undefined;
+  const rand = mulberry32(seed);
+  const { bodyDef, colorPal, eyeDef, mouthDef, headDef, itemDef, bgDef, patternDef, auraDef, animDef, compDef, outlineDef, rarity } = pickAllTraits(rand, profile);
 
   return {
     body: bodyDef.id, bodyName: bodyDef.name,
@@ -3317,23 +3552,7 @@ export function generateCreatureGif(seed: number, badgeId?: string, opts?: { tra
 
   const profile = badgeId ? BADGE_RARITY_PROFILE[badgeId] : undefined;
   const rand = mulberry32(seed);
-  const bodyDef = weightedPick(BODY_SHAPES, rand);
-  const colorPal = weightedPick(COLOR_PALETTES, rand);
-  const eyeDef = weightedPick(EYES, rand);
-  const mouthDef = weightedPick(MOUTHS, rand);
-  const headDef = weightedPick(HEADGEAR, rand);
-  const itemDef = weightedPick(HELD_ITEMS, rand);
-  const bgDef = weightedPick(BACKGROUNDS, rand);
-  const patternDef = weightedPick(PATTERNS, rand);
-  const auraDef = weightedPick(AURAS, rand);
-  const animDef = weightedPick(ANIMATIONS, rand);
-  const compDef = weightedPick(COMPANIONS, rand);
-  const outlineDef = weightedPick(OUTLINES, rand);
-  const rarity = computeRarity(
-    [bodyDef, colorPal, eyeDef, mouthDef, headDef, itemDef, bgDef, patternDef, auraDef, animDef, compDef, outlineDef],
-    profile,
-    rand(),
-  );
+  const { bodyDef, colorPal, eyeDef, mouthDef, headDef, itemDef, bgDef, patternDef, auraDef, animDef, compDef, outlineDef, rarity } = pickAllTraits(rand, profile);
 
   const palObj = new PalBuilder();
   palObj.add(0); palObj.add('#ffffff');
@@ -3351,8 +3570,8 @@ export function generateCreatureGif(seed: number, badgeId?: string, opts?: { tra
     // Snapshot background so offsetX / glitch only shifts creature, not bg
     const bgSnap = new Uint8Array(src.data);
     drawBody(src, bodyDef, colorPal, palObj, bounceY);
-    drawOutline(src, outlineDef, colorPal, palObj, bounceY, f, totalFrames);
     drawPattern(src, patternDef, colorPal, palObj, bounceY);
+    drawOutline(src, outlineDef, colorPal, palObj, bounceY, f, totalFrames);
     drawEyes(src, eyeDef, colorPal, palObj, bounceY, f, totalFrames);
     drawMouth(src, mouthDef, colorPal, palObj, bounceY, f, totalFrames);
     drawHeadgear(src, headDef, colorPal, palObj, bounceY);
@@ -3575,7 +3794,7 @@ export function generateCreatureGif(seed: number, badgeId?: string, opts?: { tra
   }
 
   const finalPal = palObj.finalize();
-  const buf = Buffer.alloc(W * H * totalFrames * 5);
+  const buf = Buffer.alloc(Math.ceil(W * H * totalFrames * 2) + 65536);
   const gif = new GifWriter(buf, W, H, { loop: 0, palette: finalPal });
   for (let f = 0; f < totalFrames; f++) {
     gif.addFrame(0, 0, W, H, frames[f], { delay: delayCs, disposal: 2, ...(wantTransparent ? { transparent: 0 } : {}) });
@@ -3599,6 +3818,132 @@ export function generateCreatureGif(seed: number, badgeId?: string, opts?: { tra
   };
 
   return { gif: Buffer.from(buf.buffer, buf.byteOffset, gifSize), traits };
+}
+
+// ── Minimal PNG encoder (no external deps — uses Node built-in zlib) ──────────
+
+function crc32Png(buf: Uint8Array | Buffer): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) {
+    crc ^= buf[i];
+    for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const len = Buffer.allocUnsafe(4); len.writeUInt32BE(data.length, 0);
+  const t = Buffer.from(type, 'ascii');
+  const crcBuf = Buffer.allocUnsafe(4);
+  crcBuf.writeUInt32BE(crc32Png(Buffer.concat([t, data])), 0);
+  return Buffer.concat([len, t, data, crcBuf]);
+}
+
+function encodeRGBAPng(width: number, height: number, rgba: Uint8Array): Buffer {
+  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const ihdr = Buffer.allocUnsafe(13);
+  ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0; // 8-bit RGBA
+  const stride = width * 4 + 1;
+  const raw = Buffer.allocUnsafe(height * stride);
+  for (let y = 0; y < height; y++) {
+    raw[y * stride] = 0; // filter type: None
+    raw.set(rgba.subarray(y * width * 4, (y + 1) * width * 4), y * stride + 1);
+  }
+  const idat = deflateSync(raw, { level: 1 });
+  return Buffer.concat([sig, pngChunk('IHDR', ihdr), pngChunk('IDAT', idat), pngChunk('IEND', Buffer.alloc(0))]);
+}
+
+/**
+ * Generate a single-frame transparent RGBA PNG of the creature.
+ *
+ * Identical trait resolution to generateCreatureGif (same seed → same traits).
+ * Renders frame 0 (idle reference pose) without any background — palette
+ * index 0 maps to alpha 0 in the output.
+ *
+ * Use this for minigame sprite sheets: each player's NFT has a unique look
+ * but you always have a clean, game-ready transparent PNG to work with.
+ */
+export function generateCreaturePng(seed: number, badgeId?: string): { png: Buffer; traits: CreatureTraits } {
+  const SRC = 48, SCALE = 10, W = SRC * SCALE, H = SRC * SCALE;
+  const totalFrames = 24;
+
+  // ── Trait resolution — same RNG sequence as generateCreatureGif ───────────
+  const profile = badgeId ? BADGE_RARITY_PROFILE[badgeId] : undefined;
+  const rand = mulberry32(seed);
+  const { bodyDef, colorPal, eyeDef, mouthDef, headDef, itemDef, bgDef, patternDef, auraDef, animDef, compDef, outlineDef, rarity } = pickAllTraits(rand, profile);
+
+  const palObj = new PalBuilder();
+  palObj.add(0); palObj.add('#ffffff');
+
+  // ── Render frame 0 (idle reference pose), transparent background ─────────
+  const f = 0;
+  const src = new Canvas(SRC, SRC);
+  src.clear(0); // index 0 = transparency key
+  const { bounceY, offsetX } = computeAnimation(animDef, f, totalFrames);
+  drawBody(src, bodyDef, colorPal, palObj, bounceY);
+  drawPattern(src, patternDef, colorPal, palObj, bounceY);
+  drawOutline(src, outlineDef, colorPal, palObj, bounceY, f, totalFrames);
+  drawEyes(src, eyeDef, colorPal, palObj, bounceY, f, totalFrames);
+  drawMouth(src, mouthDef, colorPal, palObj, bounceY, f, totalFrames);
+  drawHeadgear(src, headDef, colorPal, palObj, bounceY);
+  drawHeldItem(src, itemDef, colorPal, palObj, bounceY, f);
+  drawAura(src, auraDef, colorPal, palObj, bounceY, f, totalFrames);
+  drawCompanion(src, compDef, colorPal, palObj, bounceY, f, totalFrames);
+
+  // Apply offsetX shift (creature only; background stays transparent = 0)
+  if (offsetX !== 0) {
+    const result = new Uint8Array(SRC * SRC); // all zeros = transparent
+    for (let y = 0; y < SRC; y++)
+      for (let x = 0; x < SRC; x++) {
+        const px = src.data[y * SRC + x];
+        if (px !== 0) {
+          const nx = x + offsetX;
+          if (nx >= 0 && nx < SRC) result[y * SRC + nx] = px;
+        }
+      }
+    src.data.set(result);
+  }
+
+  // ── Upscale 48×48 → 480×480 (nearest-neighbor) ───────────────────────────
+  const upscaled = new Uint8Array(W * H);
+  for (let y = 0; y < SRC; y++)
+    for (let x = 0; x < SRC; x++) {
+      const idx = src.data[y * SRC + x];
+      for (let sy = 0; sy < SCALE; sy++)
+        for (let sx = 0; sx < SCALE; sx++)
+          upscaled[(y * SCALE + sy) * W + (x * SCALE + sx)] = idx;
+    }
+
+  // ── Palette → RGBA: index 0 = transparent (alpha 0), rest = opaque ───────
+  const palette = palObj.finalize();
+  const rgba = new Uint8Array(W * H * 4);
+  for (let i = 0; i < W * H; i++) {
+    const idx = upscaled[i];
+    const col = palette[idx] ?? 0;
+    rgba[i * 4]     = (col >> 16) & 255; // R
+    rgba[i * 4 + 1] = (col >> 8)  & 255; // G
+    rgba[i * 4 + 2] = col & 255;          // B
+    rgba[i * 4 + 3] = idx === 0 ? 0 : 255; // A
+  }
+
+  const traits: CreatureTraits = {
+    body: bodyDef.id, bodyName: bodyDef.name,
+    color: colorPal.id, colorName: colorPal.name,
+    eyes: eyeDef.id, eyesName: eyeDef.name,
+    mouth: mouthDef.id, mouthName: mouthDef.name,
+    headgear: headDef.id, headgearName: headDef.name,
+    item: itemDef.id, itemName: itemDef.name,
+    background: bgDef.id, backgroundName: bgDef.name,
+    pattern: patternDef.id, patternName: patternDef.name,
+    aura: auraDef.id, auraName: auraDef.name,
+    animation: animDef.id, animationName: animDef.name,
+    companion: compDef.id, companionName: compDef.name,
+    outline: outlineDef.id, outlineName: outlineDef.name,
+    rarity,
+  };
+
+  return { png: encodeRGBAPng(W, H, rgba), traits };
 }
 
 /**
@@ -3628,6 +3973,7 @@ export function generateCreatureMetadata(
   const traits = resolveTraits(seed, badgeId);
   const creatureName = generateCreatureName(seed);
   const imageUrl = `${baseUrl}/api/v1/creatures/image/${wallet}/${badgeId}.gif`;
+  const pngUrl   = `${baseUrl}/api/v1/creatures/image/${wallet}/${badgeId}.png`;
 
   return {
     name: creatureName,
@@ -3652,9 +3998,13 @@ export function generateCreatureMetadata(
       { trait_type: 'Rarity', value: traits.rarity },
       { trait_type: 'Milestone', value: badgeName },
       { trait_type: 'Badge', value: badgeId },
+      { trait_type: 'Sprite PNG', value: pngUrl },  // transparent sprite for minigames
     ],
     properties: {
-      files: [{ uri: imageUrl, type: 'image/gif' }],
+      files: [
+        { uri: imageUrl, type: 'image/gif' },
+        { uri: pngUrl,   type: 'image/png' },  // transparent sprite for game engines
+      ],
       category: 'image',
       creators: [{ address: wallet, share: 100 }],
     },

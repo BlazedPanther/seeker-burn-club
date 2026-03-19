@@ -8,6 +8,7 @@ import {
   getUserSkrAta, SKR_MINT, getMintDecimals,
   parseUnits, formatUnits, addDecimalStrings,
 } from '../lib/solana.js';
+import { fetchTransactionWithRetry } from '../services/burn.service.js';
 import { securityLog } from '../lib/security.js';
 import { redis } from '../lib/redis.js';
 import { env } from '../config/env.js';
@@ -26,10 +27,10 @@ async function verifyDeposit(
   signature: string,
   claimedAmount: string,
 ): Promise<{ amountStr: string; decimals: number; slot: number; blockTime: number }> {
-  const tx = await connection.getTransaction(signature, {
-    commitment: 'finalized',
-    maxSupportedTransactionVersion: 0,
-  });
+  // Use the same retry logic as burns: polls every 2s up to 8 attempts (~56s total)
+  // so a tx that's still propagating is not immediately failed with TRANSACTION_NOT_FOUND.
+  // Use 'confirmed' (not 'finalized') for speed — same reliability guarantee as the burn path.
+  const tx = await fetchTransactionWithRetry(signature, { commitment: 'confirmed' });
 
   if (!tx) throw new Error('TRANSACTION_NOT_FOUND');
   if (tx.meta?.err) throw new Error('TRANSACTION_FAILED_ON_CHAIN');

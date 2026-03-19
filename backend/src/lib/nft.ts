@@ -4,12 +4,9 @@
  * Uses only @solana/web3.js + internal SPL token helpers (no extra Metaplex dependencies).
  * Manually constructs Metaplex Token Metadata Program instructions via Borsh encoding.
  *
- * Flow for each badge:
- * 1. Create an SPL Mint (0 decimals).
- * 2. Create the owner's ATA and mint exactly 1 token.
- * 3. Remove freeze authority (supply permanently 1).
- * 4. Create an on-chain Metaplex Token Metadata v3 account.
- * 5. Create a Metaplex Master Edition v3 (makes it a true 1-of-1 NFT).
+ * Two-phase flow:
+ * 1. User signs a simple SOL transfer (creator fee) — wallet simulates it perfectly.
+ * 2. Server mints the full NFT after confirming payment (create mint, ATA, metadata, master edition).
  *
  * Requires env vars:
  *   MINT_AUTHORITY_SECRET_KEY  — base58 or JSON-array of the authority keypair
@@ -21,17 +18,18 @@ import {
   PublicKey,
   Transaction,
   TransactionInstruction,
+  TransactionMessage,
+  VersionedTransaction,
+  ComputeBudgetProgram,
   SystemProgram,
   SYSVAR_RENT_PUBKEY,
 } from '@solana/web3.js';
 import {
-  AuthorityType,
   TOKEN_PROGRAM_ID,
   MINT_SIZE,
   createInitializeMintInstruction,
   createAssociatedTokenAccountInstruction,
   createMintToInstruction,
-  createSetAuthorityInstruction,
   getAssociatedTokenAddressSync,
 } from './spl-token-compat.js';
 import { connection } from './solana.js';
@@ -55,7 +53,7 @@ function findMetadataPDA(mint: PublicKey): PublicKey {
   return pda;
 }
 
-function findMasterEditionPDA(mint: PublicKey): PublicKey {
+export function findMasterEditionPDA(mint: PublicKey): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
     [
       Buffer.from('metadata'),
@@ -151,85 +149,113 @@ function getMintAuthority(): Keypair {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export interface BadgeClaimTx {
-  /** Base64-encoded transaction partially signed by the server (mintKeypair + authority). */
+  /** Base64-encoded transaction — a simple SOL transfer (1 signer: user). */
   serializedTx: string;
-  /** The public key of the new NFT mint account. */
+  /** Placeholder — actual mint is created server-side after payment confirms. */
   mintPublicKey: string;
 }
 
 
 /**
- * Build a badge NFT mint transaction where the USER is the fee payer.
+ * Build a simple SOL-transfer payment transaction for claiming an NFT badge.
  *
- * The server partially signs with [mintKeypair, authority].
- * The client (mobile app) signs as feePayer via MWA and broadcasts.
+ * The user's transaction is ONLY a SOL transfer to the treasury.
+ * This makes the transaction fully simulatable by the Seeker / Seed Vault wallet
+ * (1 signer, standard SystemProgram instructions → no "couldn't be simulated" warning).
  *
- * Flow:
- *   1. Server returns serializedTx (base64) + mintPublicKey
- *   2. Client decodes → passes to MWA signAndSendTransaction
- *   3. Client calls claim/confirm endpoint with txSignature + mintPublicKey
+ * After the user's payment is confirmed, the server mints the NFT entirely server-side
+ * via mintBadgeNft().
  */
 export async function buildBadgeClaimTransaction(
   ownerWalletAddress: string,
-  badgeId: string,
-  seedSalt?: string,
+  _badgeId: string,
+  _seedSalt?: string,
 ): Promise<BadgeClaimTx> {
-  const def = getBadgeById(badgeId);
-  if (!def) throw new Error(`Unknown badge ID: ${badgeId}`);
-
-  const authority = getMintAuthority();
   const owner = new PublicKey(ownerWalletAddress);
-  const mintKeypair = Keypair.generate();
 
-  // Upload creature assets to Arweave (falls back to backend URLs)
-  const assets = await uploadCreatureAssets(ownerWalletAddress, badgeId, seedSalt);
-  const metadataUri = assets.metadataUrl;
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
 
-  // Resolve collection mint (if configured)
-  const collectionMint = env.BADGE_COLLECTION_MINT
-    ? new PublicKey(env.BADGE_COLLECTION_MINT)
-    : undefined;
+  const instructions: TransactionInstruction[] = [];
 
-  // Resolve creature traits for the name
-  const seed = creatureSeed(ownerWalletAddress, badgeId, seedSalt);
-  const traits = resolveTraits(seed, badgeId);
-  const creatureName = generateCreatureName(seed);
+  // Compute budget for priority fee display in wallet
+  instructions.push(ComputeBudgetProgram.setComputeUnitLimit({ units: 10_000 }));
+  instructions.push(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }));
 
-  // Rent for the new mint account (paid by the user)
-  const mintRent = await connection.getMinimumBalanceForRentExemption(MINT_SIZE);
-
-  // Derive owner's ATA for this brand-new mint
-  const ownerAta = getAssociatedTokenAddressSync(mintKeypair.publicKey, owner);
-
-  // Metaplex PDAs
-  const metadataPDA = findMetadataPDA(mintKeypair.publicKey);
-  const masterEditionPDA = findMasterEditionPDA(mintKeypair.publicKey);
-
-  const { blockhash } = await connection.getLatestBlockhash('finalized');
-
-  const tx = new Transaction();
-  tx.feePayer = owner;       // ← USER pays all fees
-  tx.recentBlockhash = blockhash;
-
-  // 1. Create mint account on-chain (rent paid by user)
-  tx.add(SystemProgram.createAccount({
-    fromPubkey: owner,
-    newAccountPubkey: mintKeypair.publicKey,
-    lamports: mintRent,
-    space: MINT_SIZE,
-    programId: TOKEN_PROGRAM_ID,
-  }));
-
-  // 1b. Creator fee transfer → treasury (user pays)
+  // Creator fee → treasury (the only real instruction)
   if (env.CREATOR_FEE_LAMPORTS > 0) {
-    tx.add(SystemProgram.transfer({
+    instructions.push(SystemProgram.transfer({
       fromPubkey: owner,
       toPubkey: new PublicKey(env.TREASURY_WALLET),
       lamports: env.CREATOR_FEE_LAMPORTS,
     }));
   }
 
-  // 2. Initialize as a mint with 0 decimals (authority = server)
+  // Build v0 VersionedTransaction — single signer (user), fully simulatable
+  const messageV0 = new TransactionMessage({
+    payerKey: owner,
+    recentBlockhash: blockhash,
+    instructions,
+  }).compileToV0Message();
+
+  const vtx = new VersionedTransaction(messageV0);
+  // No server signatures needed — user is the only signer
+
+  const serialized = vtx.serialize();
+  return {
+    serializedTx: Buffer.from(serialized).toString('base64'),
+    // Actual mint is generated server-side; this is a placeholder for API compat
+    mintPublicKey: 'pending_server_mint',
+  };
+}
+
+/**
+ * Mint a badge NFT entirely server-side — create mint, ATA, token, metadata, master edition.
+ *
+ * Called by the /claim/confirm endpoint after verifying the user's SOL payment.
+ * The authority keypair pays all rent + tx fees. Returns the new mint's public key.
+ */
+export async function mintBadgeNft(
+  ownerWallet: string,
+  badgeId: string,
+  seedSalt?: string,
+): Promise<{ mintPublicKey: string; txSignature: string }> {
+  const authority = getMintAuthority();
+  const owner = new PublicKey(ownerWallet);
+  const mintKeypair = Keypair.generate();
+
+  // Creature metadata (deterministic from wallet + badgeId + seedSalt)
+  const assets = await uploadCreatureAssets(ownerWallet, badgeId, seedSalt);
+  const seed = creatureSeed(ownerWallet, badgeId, seedSalt);
+  const creatureName = generateCreatureName(seed);
+
+  const collectionMint = env.BADGE_COLLECTION_MINT
+    ? new PublicKey(env.BADGE_COLLECTION_MINT)
+    : undefined;
+
+  const mintRent = await connection.getMinimumBalanceForRentExemption(MINT_SIZE);
+  const ownerAta = getAssociatedTokenAddressSync(mintKeypair.publicKey, owner);
+  const metadataPDA = findMetadataPDA(mintKeypair.publicKey);
+  const masterEditionPDA = findMasterEditionPDA(mintKeypair.publicKey);
+
+  const { blockhash } = await connection.getLatestBlockhash('confirmed');
+
+  const tx = new Transaction();
+  tx.feePayer = authority.publicKey;
+  tx.recentBlockhash = blockhash;
+
+  tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
+  tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }));
+
+  // 1. Create mint account (authority pays rent)
+  tx.add(SystemProgram.createAccount({
+    fromPubkey: authority.publicKey,
+    newAccountPubkey: mintKeypair.publicKey,
+    lamports: mintRent,
+    space: MINT_SIZE,
+    programId: TOKEN_PROGRAM_ID,
+  }));
+
+  // 2. Initialize mint (0 decimals, authority as mint authority + freeze authority)
   tx.add(createInitializeMintInstruction(
     mintKeypair.publicKey,
     0,
@@ -237,15 +263,15 @@ export async function buildBadgeClaimTransaction(
     authority.publicKey,
   ));
 
-  // 3. Create owner's ATA (rent paid by user)
+  // 3. Create owner's ATA (authority pays rent)
   tx.add(createAssociatedTokenAccountInstruction(
-    owner,
+    authority.publicKey,
     ownerAta,
     owner,
     mintKeypair.publicKey,
   ));
 
-  // 4. Mint exactly 1 token to the ATA (authority = server)
+  // 4. Mint exactly 1 token to the owner's ATA
   tx.add(createMintToInstruction(
     mintKeypair.publicKey,
     ownerAta,
@@ -253,88 +279,102 @@ export async function buildBadgeClaimTransaction(
     1,
   ));
 
-  // 5. Metaplex token metadata v3 (payer = USER, mintAuthority = server)
-  //    MUST come before authority removal — Metaplex verifies mint authority
+  // 5. CreateMetadataAccountV3
   tx.add(new TransactionInstruction({
     programId: TOKEN_METADATA_PROGRAM_ID,
     keys: [
-      { pubkey: metadataPDA,              isSigner: false, isWritable: true  },
-      { pubkey: mintKeypair.publicKey,    isSigner: false, isWritable: false },
-      { pubkey: authority.publicKey,      isSigner: true,  isWritable: false }, // mintAuthority
-      { pubkey: owner,                    isSigner: true,  isWritable: true  }, // payer (USER)
-      { pubkey: authority.publicKey,      isSigner: false, isWritable: false }, // updateAuthority
-      { pubkey: SystemProgram.programId,  isSigner: false, isWritable: false },
-      { pubkey: SYSVAR_RENT_PUBKEY,       isSigner: false, isWritable: false },
+      { pubkey: metadataPDA,             isSigner: false, isWritable: true  },
+      { pubkey: mintKeypair.publicKey,   isSigner: false, isWritable: false },
+      { pubkey: authority.publicKey,     isSigner: true,  isWritable: false }, // mintAuthority
+      { pubkey: authority.publicKey,     isSigner: true,  isWritable: true  }, // payer
+      { pubkey: authority.publicKey,     isSigner: false, isWritable: false }, // updateAuthority
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY,      isSigner: false, isWritable: false },
     ],
     data: encodeCreateMetadataAccountV3({
       name: creatureName,
       symbol: 'BURNSPIRIT',
-      uri: metadataUri,
+      uri: assets.metadataUrl,
       sellerFeeBasisPoints: 0,
-      isMutable: false,
+      isMutable: true,
       collectionMint,
     }),
   }));
 
-  // 8. Metaplex master edition v3 (payer = USER, authority = server)
+  // 6. CreateMasterEditionV3
   tx.add(new TransactionInstruction({
     programId: TOKEN_METADATA_PROGRAM_ID,
     keys: [
-      { pubkey: masterEditionPDA,         isSigner: false, isWritable: true  },
+      { pubkey: masterEditionPDA,        isSigner: false, isWritable: true  },
       { pubkey: mintKeypair.publicKey,    isSigner: false, isWritable: true  },
-      { pubkey: authority.publicKey,      isSigner: true,  isWritable: false }, // updateAuthority
-      { pubkey: authority.publicKey,      isSigner: true,  isWritable: false }, // mintAuthority
-      { pubkey: owner,                    isSigner: true,  isWritable: true  }, // payer (USER)
-      { pubkey: metadataPDA,              isSigner: false, isWritable: true  },
-      { pubkey: TOKEN_PROGRAM_ID,         isSigner: false, isWritable: false },
-      { pubkey: SystemProgram.programId,  isSigner: false, isWritable: false },
-      { pubkey: SYSVAR_RENT_PUBKEY,       isSigner: false, isWritable: false },
+      { pubkey: authority.publicKey,     isSigner: true,  isWritable: false }, // updateAuthority
+      { pubkey: authority.publicKey,     isSigner: true,  isWritable: false }, // mintAuthority
+      { pubkey: authority.publicKey,     isSigner: true,  isWritable: true  }, // payer
+      { pubkey: metadataPDA,             isSigner: false, isWritable: true  },
+      { pubkey: TOKEN_PROGRAM_ID,        isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY,      isSigner: false, isWritable: false },
     ],
     data: encodeCreateMasterEditionV3(),
   }));
 
-  // 9. Verify collection membership (if collection is configured)
-  if (collectionMint) {
+  tx.sign(authority, mintKeypair);
+  const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false });
+  await connection.confirmTransaction(sig, 'confirmed');
+
+  return {
+    mintPublicKey: mintKeypair.publicKey.toBase58(),
+    txSignature: sig,
+  };
+}
+
+/**
+ * Verify collection membership for a freshly minted badge NFT.
+ * Must be called server-side (fire-and-forget) AFTER the user's mint tx is confirmed.
+ * The mint authority keypair pays the network fee for this instruction.
+ *
+ * This is intentionally NOT included in the user-signed transaction because
+ * complex Metaplex multi-CPI instructions cause wallet simulation to fail.
+ */
+export async function verifyCollectionMembership(mintPublicKey: string): Promise<string | null> {
+  if (!env.BADGE_COLLECTION_MINT) return null;
+  try {
+    const authority = getMintAuthority();
+    const mint = new PublicKey(mintPublicKey);
+    const collectionMint = new PublicKey(env.BADGE_COLLECTION_MINT);
+    const metadataPDA = findMetadataPDA(mint);
     const collectionMetadataPDA = findMetadataPDA(collectionMint);
     const collectionMasterEditionPDA = findMasterEditionPDA(collectionMint);
 
-    // SetAndVerifyCollectionV2: instruction discriminant = 32 (0x20 → actually 25 for SetAndVerifyCollection)
-    // Instruction index 25 = SetAndVerifyCollection
+    const { blockhash } = await connection.getLatestBlockhash('confirmed');
+    const tx = new Transaction();
+    tx.feePayer = authority.publicKey;
+    tx.recentBlockhash = blockhash;
+
+    // SetAndVerifySizedCollectionItem (index 32) for sized collections,
+    // or SetAndVerifyCollection (index 25) for unsized — sized is the default
+    // when a collection is created with collectionDetails set.
     tx.add(new TransactionInstruction({
       programId: TOKEN_METADATA_PROGRAM_ID,
       keys: [
-        { pubkey: metadataPDA,                isSigner: false, isWritable: true  }, // metadata account of the NFT
-        { pubkey: authority.publicKey,         isSigner: true,  isWritable: true  }, // collection authority (update authority of collection)
-        { pubkey: owner,                       isSigner: true,  isWritable: true  }, // payer
-        { pubkey: authority.publicKey,         isSigner: false, isWritable: false }, // update authority of NFT
+        { pubkey: metadataPDA,                isSigner: false, isWritable: true  }, // NFT metadata
+        { pubkey: authority.publicKey,        isSigner: true,  isWritable: true  }, // collection authority
+        { pubkey: authority.publicKey,        isSigner: true,  isWritable: true  }, // payer
+        { pubkey: authority.publicKey,        isSigner: false, isWritable: false }, // update authority of NFT
         { pubkey: collectionMint,             isSigner: false, isWritable: false }, // collection mint
         { pubkey: collectionMetadataPDA,      isSigner: false, isWritable: true  }, // collection metadata
         { pubkey: collectionMasterEditionPDA, isSigner: false, isWritable: false }, // collection master edition
       ],
-      data: Buffer.from([32]),  // SetAndVerifySizedCollectionItem (for sized collections)
+      data: Buffer.from([32]), // SetAndVerifySizedCollectionItem
     }));
+
+    tx.sign(authority);
+    const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false });
+    return sig;
+  } catch (err) {
+    console.error('[verifyCollectionMembership] non-fatal error:', err);
+    return null;
   }
-
-  // CreateMasterEditionV3 internally transfers mint authority to the master
-  // edition PDA, but we add an explicit SetAuthority as a defence-in-depth
-  // measure. If the master edition already removed it this becomes a harmless
-  // no-op that Solana rejects silently in simulation — the real protection is
-  // the confirm endpoint which verifies authority == null on-chain.
-  tx.add(createSetAuthorityInstruction(
-    mintKeypair.publicKey,
-    authority.publicKey,
-    AuthorityType.MintTokens,
-    null,  // revoke mint authority entirely
-  ));
-
-  // Server partially signs: mintKeypair (new account signer) + authority (mint/metadata signer)
-  tx.partialSign(mintKeypair, authority);
-
-  const serialized = tx.serialize({ requireAllSignatures: false });
-  return {
-    serializedTx: Buffer.from(serialized).toString('base64'),
-    mintPublicKey: mintKeypair.publicKey.toBase58(),
-  };
 }
 
 /**

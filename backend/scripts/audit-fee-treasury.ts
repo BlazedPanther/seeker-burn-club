@@ -25,13 +25,13 @@ async function main() {
   const conn = new Connection(rpcUrl, 'confirmed');
 
   try {
-    const rows = await sql<BurnRow[]>`
+    const rows = (await sql`
       SELECT tx_signature, burn_amount::text, fee_amount::text, verified_at
       FROM burns
       WHERE status = 'VERIFIED'
       ORDER BY verified_at DESC
       LIMIT 10
-    `;
+    `) as BurnRow[];
 
     console.log(`Auditing ${rows.length} recent verified burns`);
 
@@ -93,7 +93,7 @@ async function main() {
     console.log(`1% ratio checks passed: ${ratioPass}/${rows.length}`);
     console.log(`Treasury transfer found on-chain: ${treasuryTransferFound}/${rows.length}`);
   } finally {
-    await sql.end({ timeout: 5 });
+    await sql.end();
   }
 }
 
