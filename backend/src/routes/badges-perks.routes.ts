@@ -322,7 +322,7 @@ export async function badgesRoutes(fastify: FastifyInstance) {
       // Rate limit: max 10 claim prepares per hour per wallet
       // (prepare is now a cheap SOL-transfer build — no keypair gen or partial signing)
       try {
-        const rateKey = `ratelimit:claim-prepare:${wallet}`;
+        const rateKey = `ratelimit:claim-prepare:v2:${wallet}`;
         const count = await redis.eval(
           `local c = redis.call('INCR', KEYS[1]); if c == 1 then redis.call('EXPIRE', KEYS[1], 3600) end; return c`,
           1,
