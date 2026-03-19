@@ -213,6 +213,7 @@ export async function buildBadgeClaimTransaction(
  *
  * Called by the /claim/confirm endpoint after verifying the user's SOL payment.
  * The authority keypair pays all rent + tx fees. Returns the new mint's public key.
+ * Retries up to 3 times with a fresh blockhash on each attempt.
  */
 export async function mintBadgeNft(
   ownerWallet: string,
@@ -237,11 +238,17 @@ export async function mintBadgeNft(
   const metadataPDA = findMetadataPDA(mintKeypair.publicKey);
   const masterEditionPDA = findMasterEditionPDA(mintKeypair.publicKey);
 
-  const { blockhash } = await connection.getLatestBlockhash('confirmed');
+  // Retry up to 3 times — fetch a fresh blockhash each attempt to avoid "Blockhash not found"
+  const MAX_ATTEMPTS = 3;
+  let lastError: unknown;
 
-  const tx = new Transaction();
-  tx.feePayer = authority.publicKey;
-  tx.recentBlockhash = blockhash;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+
+      const tx = new Transaction();
+      tx.feePayer = authority.publicKey;
+      tx.recentBlockhash = blockhash;
 
   tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
   tx.add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }));
@@ -319,13 +326,29 @@ export async function mintBadgeNft(
   }));
 
   tx.sign(authority, mintKeypair);
-  const sig = await connection.sendRawTransaction(tx.serialize(), { skipPreflight: false });
-  await connection.confirmTransaction(sig, 'confirmed');
+      const sig = await connection.sendRawTransaction(tx.serialize(), {
+        skipPreflight: true,
+        maxRetries: 3,
+      });
+      await connection.confirmTransaction(
+        { signature: sig, blockhash, lastValidBlockHeight },
+        'confirmed',
+      );
 
-  return {
-    mintPublicKey: mintKeypair.publicKey.toBase58(),
-    txSignature: sig,
-  };
+      return {
+        mintPublicKey: mintKeypair.publicKey.toBase58(),
+        txSignature: sig,
+      };
+    } catch (err) {
+      lastError = err;
+      console.error(`[mintBadgeNft] attempt ${attempt}/${MAX_ATTEMPTS} failed:`, err);
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise(r => setTimeout(r, 2000 * attempt));
+      }
+    }
+  }
+
+  throw lastError;
 }
 
 /**
