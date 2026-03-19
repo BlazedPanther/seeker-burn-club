@@ -49,6 +49,15 @@ android {
     namespace = "club.seekerburn.app"
     compileSdk = 35
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("release.keystore")
+            storePassword = "REDACTED"
+            keyAlias = "seekerburn"
+            keyPassword = "REDACTED"
+        }
+    }
+
     defaultConfig {
         applicationId = "club.seekerburn.app"
         minSdk = 33
@@ -84,6 +93,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
