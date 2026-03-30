@@ -11,6 +11,7 @@ interface UserRow {
   longestStreak: number;
   lifetimeBurned: string;
   badgeCount: number;
+  xp: string;
 }
 
 /** Type for raw SQL rank queries. */
@@ -69,6 +70,17 @@ const LEADERBOARD_CONFIG = {
         SELECT referral_qualified_count FROM users WHERE wallet_address = ${wallet}
       )`,
   },
+  xp: {
+    orderColumn: users.xp,
+    displaySuffix: ' XP',
+    extractValue: (r: UserRow): number => Number(r.xp ?? 0),
+    rankQuery: (wallet: string) => sql`
+      SELECT COUNT(*) + 1 as rank, u.xp as value
+      FROM users u
+      WHERE u.xp > (
+        SELECT xp FROM users WHERE wallet_address = ${wallet}
+      )`,
+  },
 } as const;
 
 type LeaderboardType = keyof typeof LEADERBOARD_CONFIG;
@@ -100,6 +112,7 @@ export async function leaderboardRoutes(fastify: FastifyInstance) {
         lifetimeBurned: users.lifetimeBurned,
         badgeCount: users.badgeCount,
         referralQualifiedCount: users.referralQualifiedCount,
+        xp: users.xp,
         profileTitle: users.profileTitle,
       })
       .from(users)

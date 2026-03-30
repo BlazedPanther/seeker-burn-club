@@ -108,7 +108,7 @@ async function verifyDeposit(
   return {
     amountStr,
     decimals,
-    slot: tx.slot,
+    slot: tx.slot ?? 0,
     blockTime: tx.blockTime,
   };
 }

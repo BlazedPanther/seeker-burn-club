@@ -1,0 +1,39 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Volcano/eruption — Legendary XP items -->
+    <!-- Mountain base -->
+    <path
+        android:pathData="M2,22L9,8L12,12L15,8L22,22Z"
+        android:fillColor="#78350F"/>
+    <!-- Crater -->
+    <path
+        android:pathData="M9,8L12,12L15,8L12,6Z"
+        android:fillColor="#FF6B35"/>
+    <!-- Lava glow -->
+    <path
+        android:pathData="M10,14L12,10L14,14Z"
+        android:fillColor="#FFD740"/>
+    <!-- Eruption particles -->
+    <path
+        android:pathData="M12,2L12.5,4L13,2L12.5,0Z"
+        android:fillColor="#FF4500"/>
+    <path
+        android:pathData="M8,3A1,1 0,1 1,10,3A1,1 0,1 1,8,3Z"
+        android:fillColor="#FF6B35"
+        android:fillAlpha="0.8"/>
+    <path
+        android:pathData="M14,2A0.8,0.8 0,1 1,15.6,2A0.8,0.8 0,1 1,14,2Z"
+        android:fillColor="#FFD740"
+        android:fillAlpha="0.7"/>
+    <path
+        android:pathData="M16,4A0.6,0.6 0,1 1,17.2,4A0.6,0.6 0,1 1,16,4Z"
+        android:fillColor="#FF6B35"
+        android:fillAlpha="0.6"/>
+    <path
+        android:pathData="M6,4A0.7,0.7 0,1 1,7.4,4A0.7,0.7 0,1 1,6,4Z"
+        android:fillColor="#FF4500"
+        android:fillAlpha="0.5"/>
+</vector>

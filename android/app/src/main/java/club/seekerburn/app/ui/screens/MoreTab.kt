@@ -29,6 +29,9 @@ fun MoreTab(
     onReferrals: () -> Unit,
     onSettings: () -> Unit,
     onAbout: () -> Unit,
+    onChallenges: () -> Unit,
+    onShop: () -> Unit,
+    onInventory: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
     val colors = SeekerBurnTheme.colors
@@ -56,6 +59,12 @@ fun MoreTab(
 
         // Menu items
         BurnCard {
+            MoreMenuItem(icon = Icons.Filled.EmojiEvents, label = "Challenges", onClick = onChallenges)
+            HorizontalDivider(color = colors.divider, thickness = 0.5.dp)
+            MoreMenuItem(icon = Icons.Filled.ShoppingCart, label = "Shield Shop", onClick = onShop)
+            HorizontalDivider(color = colors.divider, thickness = 0.5.dp)
+            MoreMenuItem(icon = Icons.Filled.Star, label = "Lucky Burns", onClick = onInventory)
+            HorizontalDivider(color = colors.divider, thickness = 0.5.dp)
             MoreMenuItem(icon = Icons.Filled.GroupAdd, label = "Referrals", onClick = onReferrals)
             HorizontalDivider(color = colors.divider, thickness = 0.5.dp)
             MoreMenuItem(icon = Icons.Filled.CardGiftcard, label = "Perks", onClick = onPerks)

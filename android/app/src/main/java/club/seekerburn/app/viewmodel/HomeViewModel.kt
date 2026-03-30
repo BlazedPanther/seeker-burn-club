@@ -175,6 +175,12 @@ class HomeViewModel @Inject constructor(
         lifetimeBurned: String?,
         badgesEarned: Int,
         earnedBadgeIds: Set<String> = emptySet(),
+        xpEarned: Int? = null,
+        totalXp: Long? = null,
+        level: Int? = null,
+        levelTitle: String? = null,
+        leveledUp: Boolean? = null,
+        shieldsAwarded: Int? = null,
     ) {
         _uiState.update {
             it.copy(
@@ -186,6 +192,12 @@ class HomeViewModel @Inject constructor(
                 previousStreak = 0,
                 badgesEarned = it.badgesEarned + badgesEarned,
                 earnedBadgeIds = it.earnedBadgeIds + earnedBadgeIds,
+                xp = totalXp ?: it.xp,
+                level = level ?: it.level,
+                levelTitle = levelTitle ?: it.levelTitle,
+                streakShields = it.streakShields + (shieldsAwarded ?: 0),
+                lastXpGain = xpEarned ?: 0,
+                lastLevelUp = leveledUp == true,
             )
         }
         // Background refresh for authoritative data after a short delay
@@ -225,6 +237,7 @@ class HomeViewModel @Inject constructor(
                     val totalRequired = currentBurnAmount + fee
                     state.copy(
                         isLoading = false,
+                        profileLoaded = profile != null,
                         walletAddress = walletAddress,
                         error = skrBalanceError,
                         currentStreak = profile?.currentStreak ?: 0,
@@ -237,6 +250,12 @@ class HomeViewModel @Inject constructor(
                         mintedBadgeIds = profile?.badges?.filter { it.nftMintStatus == "COMPLETED" }?.map { it.id }?.toSet() ?: emptySet(),
                         hasBurnedToday = profile?.todayBurned ?: false,
                         streakShieldActive = profile?.streakShieldActive ?: false,
+                        streakShields = profile?.streakShields ?: 0,
+                        xp = profile?.xp ?: 0,
+                        level = profile?.level ?: 1,
+                        levelTitle = profile?.levelTitle ?: "Spark",
+                        xpIntoLevel = profile?.xpIntoLevel ?: 0,
+                        xpToNextLevel = profile?.xpToNextLevel ?: 500,
                         weeklyBurnSKR = profile?.weeklyBurnSKR?.toDoubleOrNull() ?: 0.0,
                         weeklyBurnDays = profile?.weeklyBurnDays ?: 0,
                         dailyBurnSKR = profile?.dailyBurnSKR?.toDoubleOrNull() ?: 0.0,
@@ -254,6 +273,9 @@ class HomeViewModel @Inject constructor(
                             hasBurnedToday = profile?.todayBurned ?: false,
                             currentStreak = profile?.currentStreak ?: 0,
                         ),
+                        // Clear one-shot burn feedback banners on profile refresh
+                        lastXpGain = 0,
+                        lastLevelUp = false,
                     )
                 }
             } catch (e: Exception) {
@@ -278,12 +300,18 @@ class HomeViewModel @Inject constructor(
         val utcHour = Calendar.getInstance(TimeZone.getTimeZone("UTC")).get(Calendar.HOUR_OF_DAY)
         return utcHour >= SeekerBurnConfig.STREAK_AT_RISK_UTC_HOUR
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        preflightJob?.cancel()
+    }
 }
 
 // ── UI State ──
 
 data class HomeUiState(
     val isLoading: Boolean = true,
+    val profileLoaded: Boolean = false,
     val error: String? = null,
     val walletAddress: String = "",
     val currentStreak: Int = 0,
@@ -296,6 +324,12 @@ data class HomeUiState(
     val mintedBadgeIds: Set<String> = emptySet(),
     val hasBurnedToday: Boolean = false,
     val streakShieldActive: Boolean = false,
+    val streakShields: Int = 0,
+    val xp: Long = 0,
+    val level: Int = 1,
+    val levelTitle: String = "Spark",
+    val xpIntoLevel: Int = 0,
+    val xpToNextLevel: Int = 500,
     val weeklyBurnSKR: Double = 0.0,
     val weeklyBurnDays: Int = 0,
     val dailyBurnSKR: Double = 0.0,
@@ -308,6 +342,8 @@ data class HomeUiState(
     val insufficientSol: Boolean = false,
     val nextMilestone: Int = 3,
     val isStreakAtRisk: Boolean = false,
+    val lastXpGain: Int = 0,
+    val lastLevelUp: Boolean = false,
 ) {
     /** 1% of burn amount — computed so it always matches the actual on-chain fee. */
     val feeAmount: Double get() = burnAmount * SeekerBurnConfig.PLATFORM_FEE_PERCENT / 100.0

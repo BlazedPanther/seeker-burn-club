@@ -1,0 +1,19 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Lightning bolt — XP Boost -->
+    <path
+        android:pathData="M13,2L4,14H11L10,22L20,10H13Z"
+        android:fillColor="#FFD740"/>
+    <path
+        android:pathData="M13,2L11,8H16L10,22L12,14H7L13,2Z"
+        android:fillColor="#FFA000"
+        android:fillAlpha="0.6"/>
+    <!-- Pixel glow -->
+    <path
+        android:pathData="M12,6L14,6L14,8L12,8Z"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.4"/>
+</vector>

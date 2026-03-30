@@ -256,7 +256,7 @@ fun HomeTab(
         }
 
         // Streak Shield indicator
-        if (uiState.streakShieldActive) {
+        if (uiState.streakShieldActive || uiState.streakShields > 0) {
             Spacer(modifier = Modifier.height(6.dp))
             Row(
                 modifier = Modifier
@@ -273,7 +273,7 @@ fun HomeTab(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Streak Shield Active",
+                    text = "Streak Shields: ${uiState.streakShields}",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.success,
                     fontWeight = FontWeight.Bold,
@@ -300,6 +300,95 @@ fun HomeTab(
             Spacer(modifier = Modifier.height(20.dp))
         } else {
             Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // ── XP Level Bar ──
+        if (!walletAddress.isNullOrBlank() && uiState.level > 0) {
+            BurnCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Level badge
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    listOf(colors.accent, colors.accentDim),
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "${uiState.level}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontFamily = PressStart2P,
+                            color = colors.surface,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = uiState.levelTitle,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = colors.accent,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                            )
+                            Text(
+                                text = "${uiState.xpIntoLevel} / ${uiState.xpToNextLevel} XP",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.textTertiary,
+                                fontSize = 8.sp,
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        PixelProgressBar(
+                            progress = if (uiState.xpToNextLevel > 0) {
+                                uiState.xpIntoLevel.toFloat() / uiState.xpToNextLevel.toFloat()
+                            } else 0f,
+                            fillColor = colors.accent,
+                            blockCount = 20,
+                            height = 10.dp,
+                        )
+                    }
+                }
+                // XP gain feedback
+                if (uiState.lastXpGain != null && uiState.lastXpGain > 0) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "+${uiState.lastXpGain} XP earned!",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.success,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 9.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                if (uiState.lastLevelUp) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "\uD83C\uDF89 LEVEL UP! You are now ${uiState.levelTitle}!",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.accent,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 9.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
         }
 
         // ── Auth error ──

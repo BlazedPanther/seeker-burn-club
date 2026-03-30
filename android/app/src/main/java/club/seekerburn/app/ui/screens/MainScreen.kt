@@ -47,10 +47,13 @@ fun MainScreen(
     onNavigateToBadgeDetail: (String) -> Unit,
     onNavigateToPerkDetail: (String) -> Unit,
     onNavigateToPerks: () -> Unit,
+    onNavigateToChallenges: () -> Unit,
+    onNavigateToShop: () -> Unit,
+    onNavigateToInventory: () -> Unit,
     initialTab: Int = 0,
 ) {
     val colors = SeekerBurnTheme.colors
-    var selectedTab by rememberSaveable { mutableIntStateOf(initialTab.coerceIn(0, 3)) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(initialTab.coerceIn(0, 4)) }
     val authViewModel: AuthViewModel = hiltViewModel()
     val homeViewModel: HomeViewModel = hiltViewModel()
     val badgesViewModel: BadgesViewModel = hiltViewModel()
@@ -129,6 +132,13 @@ fun MainScreen(
                 NavigationBarItem(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
+                    icon = { BurnIcon(icon = BurnIcons.Swords, contentDescription = "Arena", size = 24.dp) },
+                    label = { Text("Arena") },
+                    colors = navItemColors,
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 4,
+                    onClick = { selectedTab = 4 },
                     icon = { Icon(Icons.Filled.MoreHoriz, contentDescription = "More") },
                     label = { Text("More") },
                     colors = navItemColors,
@@ -179,7 +189,8 @@ fun MainScreen(
                     error = leaderboardState.error,
                     currentWalletAddress = walletAddress,
                 )
-                3 -> MoreTab(
+                3 -> BattleArenaTab()
+                4 -> MoreTab(
                     walletAddress = walletAddress,
                     onPerks = onNavigateToPerks,
                     onActivity = onNavigateToActivity,
@@ -187,6 +198,9 @@ fun MainScreen(
                     onReferrals = onNavigateToReferrals,
                     onSettings = onNavigateToSettings,
                     onAbout = onNavigateToAbout,
+                    onChallenges = onNavigateToChallenges,
+                    onShop = onNavigateToShop,
+                    onInventory = onNavigateToInventory,
                     onDisconnect = { authViewModel.disconnect() },
                 )
                 }

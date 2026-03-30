@@ -9,6 +9,7 @@ import { generateBadgeSvg, generateBadgeMetadata } from '../lib/badge-assets.js'
 import { buildBadgeClaimTransaction, verifyCollectionMembership, checkDeterministicMintExists } from '../lib/nft.js';
 import { redis } from '../lib/redis.js';
 import { env } from '../config/env.js';
+import { MAX_SHIELDS } from '../services/shop.service.js';
 import { PublicKey } from '@solana/web3.js';
 import { creatureSeed, generateCreatureGif, generateCreaturePng, generateCreatureMetadata, resolveTraits } from '../lib/creature.js';
 
@@ -721,7 +722,11 @@ export async function perksRoutes(fastify: FastifyInstance) {
         if (perk.rewardType === 'STREAK_SHIELD') {
           await tx
             .update(users)
-            .set({ streakShieldActive: true, updatedAt: new Date() })
+            .set({
+              streakShieldActive: true,
+              streakShields: sql`LEAST(${users.streakShields} + 1, ${MAX_SHIELDS})`,
+              updatedAt: new Date(),
+            })
             .where(eq(users.id, user.id));
         }
 

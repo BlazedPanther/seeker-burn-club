@@ -42,13 +42,15 @@ export async function resetBrokenStreaks(): Promise<number> {
       return 0;
     }
 
-    // First: consume shields for users who would lose their streak but have a shield active
+    // First: consume shields for users who would lose their streak but have shields available
     const shieldResult = await tx.execute(sql`
       UPDATE users
-      SET streak_shield_active = false,
+      SET streak_shields = GREATEST(streak_shields - 1, 0),
+          streak_shield_active = CASE WHEN streak_shields > 1 THEN true ELSE false END,
+          last_burn_date = ${yesterday},
           updated_at = NOW()
       WHERE current_streak > 0
-        AND streak_shield_active = true
+        AND streak_shields > 0
         AND last_burn_date < ${yesterday}
       RETURNING wallet_address, current_streak
     `);
@@ -65,7 +67,7 @@ export async function resetBrokenStreaks(): Promise<number> {
           streak_broken_at = NOW(),
           updated_at = NOW()
       WHERE current_streak > 0
-        AND streak_shield_active = false
+        AND streak_shields = 0
         AND last_burn_date < ${yesterday}
       RETURNING wallet_address, current_streak AS old_streak
     `);

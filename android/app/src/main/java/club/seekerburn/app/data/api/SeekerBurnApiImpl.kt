@@ -245,4 +245,49 @@ class SeekerBurnApiImpl @Inject constructor(
             setBody(mapOf("code" to code))
         }.body()
     }
+
+    // ── Challenges ──
+
+    override suspend fun getChallenges(): ChallengesResponse {
+        val token = requireAuthToken()
+        return client.get("/api/v1/challenges") {
+            bearerAuth(token)
+        }.body()
+    }
+
+    // ── Shield Shop ──
+
+    override suspend fun getShieldPacks(): ShieldShopResponse {
+        // Public — no auth needed
+        return client.get("/api/v1/shop/shields").body()
+    }
+
+    override suspend fun purchaseShield(request: ShieldPurchaseRequest): ShieldPurchaseResponse {
+        val token = requireAuthToken()
+        return client.post("/api/v1/shop/shields/purchase") {
+            bearerAuth(token)
+            setBody(request)
+        }.body()
+    }
+
+    override suspend fun getShieldBalance(): ShieldBalanceResponse {
+        val token = requireAuthToken()
+        return client.get("/api/v1/shop/shields/balance") {
+            bearerAuth(token)
+        }.body()
+    }
+
+    override suspend fun getLuckyInventory(): InventoryResponse {
+        val token = requireAuthToken()
+        return client.get("/api/v1/lucky/inventory") {
+            bearerAuth(token)
+        }.body()
+    }
+
+    override suspend fun getLuckyHistory(): LuckyDropHistoryResponse {
+        val token = requireAuthToken()
+        return client.get("/api/v1/lucky/history") {
+            bearerAuth(token)
+        }.body()
+    }
 }

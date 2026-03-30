@@ -19,6 +19,9 @@ import { badgesRoutes, perksRoutes, badgeAssetRoutes } from './routes/badges-per
 import { treasuryRoutes } from './routes/treasury.routes.js';
 import { depositRoutes } from './routes/deposit.routes.js';
 import { referralsRoutes } from './routes/referrals.routes.js';
+import { challengeRoutes } from './routes/challenges.routes.js';
+import { shopRoutes } from './routes/shop.routes.js';
+import { luckyRoutes } from './routes/lucky.routes.js';
 import { startBackgroundJobs, stopBackgroundJobs } from './jobs/scheduler.js';
 
 // -- Extend Fastify types for JWT auth --
@@ -209,6 +212,9 @@ async function buildServer() {
   await fastify.register(badgesRoutes);
   await fastify.register(perksRoutes);
   await fastify.register(referralsRoutes);
+  await fastify.register(challengeRoutes);
+  await fastify.register(shopRoutes);
+  await fastify.register(luckyRoutes);
   await fastify.register(treasuryRoutes);
 
   return fastify;

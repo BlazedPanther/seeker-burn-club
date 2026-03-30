@@ -18,6 +18,12 @@ data class UserProfile(
     val lifetimeBurned: String = "0.000000",  // NUMERIC string from backend
     val totalDeposited: String = "0.000000",
     val streakShieldActive: Boolean = false,
+    val streakShields: Int = 0,
+    val xp: Long = 0,
+    val level: Int = 1,
+    val levelTitle: String = "Spark",
+    val xpIntoLevel: Int = 0,
+    val xpToNextLevel: Int = 500,
     val todayBurned: Boolean = false,
     val todayBurnSignature: String? = null,
     val lastBurnAt: String? = null,
@@ -76,6 +82,13 @@ data class BurnSubmitResponse(
     val longestStreak: Int? = null,
     val lifetimeBurned: String? = null,
     val badgesEarned: List<BadgeEarnedFromBurn>? = null,
+    val xpEarned: Int? = null,
+    val totalXp: Long? = null,
+    val level: Int? = null,
+    val levelTitle: String? = null,
+    val leveledUp: Boolean? = null,
+    val shieldsAwarded: Int? = null,
+    val luckyDrop: LuckyDropInfo? = null,
     val submittedAt: String,
 )
 
@@ -423,3 +436,147 @@ data class ReferralHistoryItem(
 ) {
     val truncatedRefereeWallet: String get() = FormatUtils.truncateAddress(refereeWallet)
 }
+
+// ──────────────────────────────────────────
+// Challenges
+// ──────────────────────────────────────────
+
+@Serializable
+data class ChallengeProgress(
+    val id: String,
+    val title: String,
+    val description: String = "",
+    val xpReward: Int = 0,
+    val progress: Float = 0f,
+    val target: Float = 1f,
+    val completed: Boolean = false,
+    val xpAwarded: Int = 0,
+) {
+    val progressFraction: Float get() = if (target > 0f) (progress / target).coerceIn(0f, 1f) else 0f
+}
+
+@Serializable
+data class ChallengesResponse(
+    val xp: Long = 0,
+    val level: Int = 1,
+    val levelTitle: String = "Spark",
+    val xpIntoLevel: Int = 0,
+    val xpToNextLevel: Int = 500,
+    val dailyChallenges: List<ChallengeProgress> = emptyList(),
+    val weeklyChallenges: List<ChallengeProgress> = emptyList(),
+    val dailySweep: Boolean = false,
+    val weekStart: String = "",
+)
+
+// ──────────────────────────────────────────
+// Shield Shop
+// ──────────────────────────────────────────
+
+@Serializable
+data class ShieldPack(
+    val id: String,
+    val shields: Int,
+    val priceUsd: Double,
+    val priceLamports: Long,
+    val priceSkrUsd: Double = 0.0,
+    val priceSkrBaseUnits: String = "0",
+)
+
+@Serializable
+data class PriceQuote(
+    val payload: String,
+    val signature: String,
+)
+
+@Serializable
+data class ShieldShopResponse(
+    val packs: List<ShieldPack>,
+    val maxShields: Int = 10,
+    val priceSource: String = "fallback",
+    val solUsd: Double = 0.0,
+    val skrUsd: Double = 0.0,
+    val priceQuote: PriceQuote? = null,
+)
+
+@Serializable
+data class ShieldPurchaseRequest(
+    val signature: String,
+    val packId: String,
+    val currency: String = "SOL",
+    val priceQuote: PriceQuote? = null,
+)
+
+@Serializable
+data class ShieldPurchaseResponse(
+    val purchaseId: String,
+    val shieldsAdded: Int,
+    val totalShields: Int,
+    val status: String,
+)
+
+@Serializable
+data class ShieldBalanceResponse(
+    val shields: Int,
+    val maxShields: Int = 10,
+)
+
+// ──────────────────────────────────────────
+// Lucky Burns
+// ──────────────────────────────────────────
+
+@Serializable
+data class LuckyDropInfo(
+    val dropped: Boolean = false,
+    val item: LuckyDropItem? = null,
+    val xpAwarded: Int? = null,
+    val shieldsAwarded: Int? = null,
+)
+
+@Serializable
+data class LuckyDropItem(
+    val id: String,
+    val name: String,
+    val description: String,
+    val rarity: String,
+    val emoji: String,
+    val effectDescription: String,
+)
+
+@Serializable
+data class InventoryItem(
+    val itemId: String,
+    val name: String,
+    val description: String,
+    val emoji: String,
+    val rarity: String,
+    val quantity: Int,
+)
+
+@Serializable
+data class ActiveBuff(
+    val buffType: String,
+    val remainingUses: Int,
+    val expiresAt: String? = null,
+)
+
+@Serializable
+data class InventoryResponse(
+    val inventory: List<InventoryItem>,
+    val activeBuffs: List<ActiveBuff>,
+)
+
+@Serializable
+data class LuckyDropHistoryItem(
+    val id: String,
+    val itemId: String,
+    val name: String,
+    val emoji: String,
+    val rarity: String,
+    val applied: Boolean,
+    val createdAt: String,
+)
+
+@Serializable
+data class LuckyDropHistoryResponse(
+    val drops: List<LuckyDropHistoryItem>,
+)

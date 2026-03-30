@@ -1,0 +1,46 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Left sword blade (diagonal) -->
+    <path
+        android:pathData="M4,4L5,4L5,5L6,5L6,6L7,6L7,7L8,7L8,8L9,8L9,9L10,9L10,10L11,10L11,11L10,11L10,10L9,10L9,9L8,9L8,8L7,8L7,7L6,7L6,6L5,6L5,5L4,5Z"
+        android:fillColor="#B0BEC5"/>
+    <!-- Left sword extended blade -->
+    <path
+        android:pathData="M11,11L12,11L12,12L13,12L13,13L12,13L12,12L11,12Z"
+        android:fillColor="#90A4AE"/>
+    <!-- Right sword blade (diagonal) -->
+    <path
+        android:pathData="M20,4L19,4L19,5L18,5L18,6L17,6L17,7L16,7L16,8L15,8L15,9L14,9L14,10L13,10L13,11L14,11L14,10L15,10L15,9L16,9L16,8L17,8L17,7L18,7L18,6L19,6L19,5L20,5Z"
+        android:fillColor="#B0BEC5"/>
+    <!-- Right sword extended blade -->
+    <path
+        android:pathData="M13,11L12,11L12,12L11,12L11,13L12,13L12,12L13,12Z"
+        android:fillColor="#90A4AE"/>
+    <!-- Left hilt -->
+    <path
+        android:pathData="M3,6L6,6L6,7L3,7Z"
+        android:fillColor="#FFAB40"/>
+    <!-- Left grip -->
+    <path
+        android:pathData="M3,7L4,7L4,9L3,9Z"
+        android:fillColor="#8D6E63"/>
+    <!-- Right hilt -->
+    <path
+        android:pathData="M18,6L21,6L21,7L18,7Z"
+        android:fillColor="#FFAB40"/>
+    <!-- Right grip -->
+    <path
+        android:pathData="M20,7L21,7L21,9L20,9Z"
+        android:fillColor="#8D6E63"/>
+    <!-- Center clash spark -->
+    <path
+        android:pathData="M11,13L13,13L13,14L14,14L14,15L13,15L13,14L11,14L11,15L10,15L10,14L11,14Z"
+        android:fillColor="#FFAB40"/>
+    <!-- Bottom tips -->
+    <path
+        android:pathData="M11,15L13,15L13,17L12,17L12,16L11,16Z"
+        android:fillColor="#FF8F00"/>
+</vector>

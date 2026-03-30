@@ -37,7 +37,7 @@ import kotlinx.coroutines.launch
 fun BurnConfirmScreen(
     walletSender: ActivityResultSender,
     onDismiss: () -> Unit,
-    onBurnSubmitted: (signature: String, newStreak: Int, burnAmount: String, badgeEarned: String?, badgeEarnedId: String?) -> Unit,
+    onBurnSubmitted: (signature: String, newStreak: Int, burnAmount: String, badgeEarned: String?, badgeEarnedId: String?, luckyDropName: String?, luckyDropItemId: String?, luckyDropRarity: String?, luckyDropEffect: String?, xpEarned: Int?, newLevel: Int?, levelTitle: String?, leveledUp: Boolean?) -> Unit,
     onBurnSigned: (signature: String, burnAmount: String, feeAmount: String) -> Unit = { _, _, _ -> },
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -63,20 +63,37 @@ fun BurnConfirmScreen(
         FormatUtils.truncateAddress(uiState.walletAddress)
     } else "Not connected"
 
-    // Compute milestone: check if the next burn will trigger a streak badge
-    val nextStreak = uiState.currentStreak + 1
-    val streakBadge = BadgeDefinition.ALL.firstOrNull {
-        it.type == BadgeType.STREAK && it.requirementValue == nextStreak
-    }
-    // Also check lifetime milestones
+    // Compute milestone: check if the next burn will trigger a badge.
+    // Guard: only predict when profile data has been successfully fetched
+    // (otherwise defaults like currentStreak=0 / earnedBadgeIds=empty cause
+    // false positives).
+    val profileLoaded = uiState.profileLoaded
+
+    // Streak badges only apply on the FIRST burn of the day — subsequent burns
+    // today don't increment streak, so skip to avoid false positives.
+    val streakBadge = if (profileLoaded && !uiState.hasBurnedToday) {
+        val nextStreak = uiState.currentStreak + 1
+        BadgeDefinition.ALL.firstOrNull {
+            it.type == BadgeType.STREAK &&
+                    it.requirementValue == nextStreak &&
+                    it.id !in uiState.earnedBadgeIds
+        }
+    } else null
+
+    // Lifetime milestones — filter out already earned inside firstOrNull so we
+    // pick the first UNEARNED badge in the crossing range.
     val nextLifetime = uiState.lifetimeBurned + uiState.burnAmount
-    val lifetimeBadge = BadgeDefinition.ALL.firstOrNull {
-        it.type == BadgeType.LIFETIME &&
-                it.requirementValue.toDouble() > uiState.lifetimeBurned &&
-                it.requirementValue.toDouble() <= nextLifetime
-    }
+    val lifetimeBadge = if (profileLoaded) {
+        BadgeDefinition.ALL.firstOrNull {
+            it.type == BadgeType.LIFETIME &&
+                    it.requirementValue.toDouble() > uiState.lifetimeBurned &&
+                    it.requirementValue.toDouble() <= nextLifetime &&
+                    it.id !in uiState.earnedBadgeIds
+        }
+    } else null
+
     val milestoneBadge = streakBadge ?: lifetimeBadge
-    val isMilestone = milestoneBadge != null && milestoneBadge.id !in uiState.earnedBadgeIds
+    val isMilestone = milestoneBadge != null
     val milestoneBadgeName: String? = milestoneBadge?.name
 
     Column(
@@ -277,6 +294,12 @@ fun BurnConfirmScreen(
                                     lifetimeBurned = submitResponse.lifetimeBurned,
                                     badgesEarned = submitResponse.badgesEarned?.size ?: 0,
                                     earnedBadgeIds = submitResponse.badgesEarned?.map { it.id }?.toSet() ?: emptySet(),
+                                    xpEarned = submitResponse.xpEarned,
+                                    totalXp = submitResponse.totalXp,
+                                    level = submitResponse.level,
+                                    levelTitle = submitResponse.levelTitle,
+                                    leveledUp = submitResponse.leveledUp,
+                                    shieldsAwarded = submitResponse.shieldsAwarded,
                                 )
                                 // Backend confirmed — navigate directly to success with real data
                                 onBurnSubmitted(
@@ -285,6 +308,14 @@ fun BurnConfirmScreen(
                                     java.math.BigDecimal.valueOf(uiState.burnAmount).toPlainString(),
                                     submitResponse.badgesEarned?.firstOrNull()?.name,
                                     submitResponse.badgesEarned?.firstOrNull()?.id,
+                                    submitResponse.luckyDrop?.item?.name,
+                                    submitResponse.luckyDrop?.item?.id,
+                                    submitResponse.luckyDrop?.item?.rarity,
+                                    submitResponse.luckyDrop?.item?.effectDescription,
+                                    submitResponse.xpEarned,
+                                    submitResponse.level,
+                                    submitResponse.levelTitle,
+                                    submitResponse.leveledUp,
                                 )
                             } else {
                                 // All retries failed — pending screen will poll getBurnStatus as fallback

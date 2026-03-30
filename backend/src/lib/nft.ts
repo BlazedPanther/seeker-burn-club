@@ -221,7 +221,7 @@ export async function buildBadgeClaimTransaction(
 
   // Compute budget — enough for metadata + master edition creation
   instructions.push(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
-  instructions.push(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 50_000 }));
+  instructions.push(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1_000_000 }));
 
   // Creator fee → treasury
   if (env.CREATOR_FEE_LAMPORTS > 0) {

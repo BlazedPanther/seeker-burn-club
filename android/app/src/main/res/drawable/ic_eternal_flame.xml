@@ -1,0 +1,27 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Eternal flame — infinite fire -->
+    <!-- Outer flame -->
+    <path
+        android:pathData="M12,2C12,2 5,10 5,15C5,18.9 8.1,22 12,22C15.9,22 19,18.9 19,15C19,10 12,2 12,2Z"
+        android:fillColor="#FF6B35"/>
+    <!-- Mid flame -->
+    <path
+        android:pathData="M12,6C12,6 8,12 8,15.5C8,17.7 9.8,19.5 12,19.5C14.2,19.5 16,17.7 16,15.5C16,12 12,6 12,6Z"
+        android:fillColor="#FFD740"/>
+    <!-- Inner core -->
+    <path
+        android:pathData="M12,10C12,10 10,13 10,15C10,16.1 10.9,17 12,17C13.1,17 14,16.1 14,15C14,13 12,10 12,10Z"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.9"/>
+    <!-- Infinity symbol inside -->
+    <path
+        android:pathData="M9.5,15C9.5,15 10.5,13.5 12,15C13.5,13.5 14.5,15 14.5,15"
+        android:strokeColor="#FF6B35"
+        android:strokeWidth="1"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"/>
+</vector>

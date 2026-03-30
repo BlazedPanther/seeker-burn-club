@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Star with sparkles — Mega luck / legendary -->
+    <!-- Main star -->
+    <path
+        android:pathData="M12,2L14.5,8.5L21.5,9.5L16.5,14L18,21L12,17.5L6,21L7.5,14L2.5,9.5L9.5,8.5Z"
+        android:fillColor="#FFD740"/>
+    <!-- Inner star shine -->
+    <path
+        android:pathData="M12,5L13.5,9.5L18,10L15,13L16,17.5L12,15L8,17.5L9,13L6,10L10.5,9.5Z"
+        android:fillColor="#FFA000"
+        android:fillAlpha="0.5"/>
+    <!-- Center glow -->
+    <path
+        android:pathData="M11,11L13,11L13,13L11,13Z"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.7"/>
+    <!-- Sparkle top-right -->
+    <path
+        android:pathData="M20,3L20.5,4.5L22,5L20.5,5.5L20,7L19.5,5.5L18,5L19.5,4.5Z"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.8"/>
+</vector>

@@ -1,0 +1,29 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Triple shield stack -->
+    <!-- Back shield -->
+    <path
+        android:pathData="M16,4L10,6V10C10,13.3 12.2,16.2 16,17.5C19.8,16.2 22,13.3 22,10V6L16,4Z"
+        android:fillColor="#16A34A"
+        android:fillAlpha="0.5"/>
+    <!-- Middle shield -->
+    <path
+        android:pathData="M12,5L6,7V11C6,14.3 8.2,17.2 12,18.5C15.8,17.2 18,14.3 18,11V7L12,5Z"
+        android:fillColor="#22C55E"
+        android:fillAlpha="0.7"/>
+    <!-- Front shield -->
+    <path
+        android:pathData="M8,6L2,8V12C2,15.3 4.2,18.2 8,19.5C11.8,18.2 14,15.3 14,12V8L8,6Z"
+        android:fillColor="#4ADE80"/>
+    <!-- Checkmark on front shield -->
+    <path
+        android:pathData="M5,12.5L7,14.5L11,10.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+</vector>

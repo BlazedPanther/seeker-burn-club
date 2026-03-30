@@ -12,6 +12,9 @@ import { redis } from '../lib/redis.js';
 import { PublicKey } from '@solana/web3.js';
 import { env } from '../config/env.js';
 import { evaluateReferralQualification } from './referrals.service.js';
+import { grantBurnXp, grantBadgeXp, levelFromXp, getLevelTitle } from './xp.service.js';
+import { evaluateChallenges, type ChallengeResult, type BurnContext } from './challenges.service.js';
+import { rollLuckyDrop, consumeXpBoost, consumeGoldenBurn, type LuckyDropResult } from './lucky.service.js';
 
 export interface VerificationResult {
   verified: boolean;
@@ -29,6 +32,14 @@ export interface BurnResult {
   longestStreak: number;
   lifetimeBurned: string;
   badgesEarned: Array<{ id: string; name: string }>;
+  xpEarned: number;
+  totalXp: number;
+  level: number;
+  levelTitle: string;
+  leveledUp: boolean;
+  shieldsAwarded: number;
+  challengeResults?: ChallengeResult;
+  luckyDrop?: LuckyDropResult;
 }
 
 /**
@@ -261,7 +272,25 @@ export async function verifyAndRecordBurn(
 
     // Recompute streak using locked state.
     const yesterday = yesterdayUTC(burnDate);
-    if (lockedUser.lastBurnDate === yesterday) {
+
+    // Shield gap coverage: if user missed days but has shields, consume them
+    let shieldsConsumedInBurn = 0;
+    if (
+      lockedUser.currentStreak > 0 &&
+      lockedUser.streakShields > 0 &&
+      lockedUser.lastBurnDate &&
+      lockedUser.lastBurnDate !== yesterday &&
+      lockedUser.lastBurnDate !== burnDate
+    ) {
+      const lastDate = new Date(lockedUser.lastBurnDate + 'T00:00:00Z');
+      const yestDate = new Date(yesterday + 'T00:00:00Z');
+      const gapDays = Math.round((yestDate.getTime() - lastDate.getTime()) / 86_400_000);
+      if (gapDays > 0 && gapDays <= lockedUser.streakShields) {
+        shieldsConsumedInBurn = gapDays;
+      }
+    }
+
+    if (lockedUser.lastBurnDate === yesterday || shieldsConsumedInBurn > 0) {
       newStreak = lockedUser.currentStreak + 1;
     } else if (lockedUser.lastBurnDate === burnDate) {
       newStreak = lockedUser.currentStreak;
@@ -276,10 +305,14 @@ export async function verifyAndRecordBurn(
 
     // Daily volume (today's total including this burn).
     const [dailyRow] = await dbTx
-      .select({ total: sql<string>`COALESCE(SUM(burn_amount::numeric), 0)` })
+      .select({
+        total: sql<string>`COALESCE(SUM(burn_amount::numeric), 0)`,
+        cnt: sql<number>`COUNT(*)::int`,
+      })
       .from(burns)
       .where(and(eq(burns.userId, lockedUser.id), eq(burns.burnDate, burnDate), eq(burns.status, 'VERIFIED')));
     const dailyVolume = parseFloat(dailyRow?.total ?? '0') + parseFloat(burnAmountStr);
+    const dailyBurnCount = (dailyRow?.cnt ?? 0) + 1;
 
     // Total verified burn count (including this one which hasn't been inserted yet).
     const [countRow] = await dbTx
@@ -322,7 +355,7 @@ export async function verifyAndRecordBurn(
         feeAmount: feeAmountStr,
         burnDate,
         streakDay: newStreak,
-        slot: tx.slot.toString(),
+        slot: (tx.slot ?? 0).toString(),
         blockTime: new Date(blockTime * 1000),
         status: 'VERIFIED',
         badgeEarnedId: newBadges[0]?.id ?? null,
@@ -345,6 +378,43 @@ export async function verifyAndRecordBurn(
       insertedBadgeCount += inserted.length;
     }
 
+    // ── Consume active buffs before XP grant ──
+    const xpMultiplier = await consumeXpBoost(lockedUser.id, dbTx);
+    const challengeMultiplier = await consumeGoldenBurn(lockedUser.id, dbTx);
+
+    // ── XP: burn XP + badge XP (with buff multiplier) ──
+    const burnXpResult = await grantBurnXp(lockedUser.id, newStreak, record!.id, dbTx, xpMultiplier);
+    let totalXpThisBurn = burnXpResult.xpEarned;
+
+    for (const badge of newBadges) {
+      const badgeXpResult = await grantBadgeXp(lockedUser.id, badge.id, dbTx);
+      totalXpThisBurn += badgeXpResult.xpEarned;
+    }
+
+    // ── Challenges: evaluate after burn ──
+    const burnHourUTC = new Date(blockTime * 1000).getUTCHours();
+    const thisBurnAmount = parseFloat(burnAmountStr);
+    const burnCtx: BurnContext = {
+      userId: lockedUser.id,
+      walletAddress,
+      burnAmount: thisBurnAmount * challengeMultiplier,
+      dailyBurnCount: dailyBurnCount + (challengeMultiplier - 1),
+      dailyVolume: dailyVolume + thisBurnAmount * (challengeMultiplier - 1),
+      burnHourUTC,
+      currentStreak: newStreak,
+      weeklyBurnDays: 0, // will be computed inside evaluateChallenges
+      weeklyVolume: 0,
+      lifetimeBurned: newLifetimeBurnedNum,
+      goldenBurnVolumeDelta: thisBurnAmount * (challengeMultiplier - 1),
+      goldenBurnCountDelta: challengeMultiplier - 1,
+    };
+    const challengeResults = await evaluateChallenges(burnCtx, burnDate, dbTx);
+    totalXpThisBurn += challengeResults.totalChallengeXp;
+
+    // ── Lucky Burns: roll for a drop ──
+    const luckyDrop = await rollLuckyDrop(lockedUser.id, record!.id, newStreak, dbTx);
+    if (luckyDrop.xpAwarded) totalXpThisBurn += luckyDrop.xpAwarded;
+
     await dbTx
       .update(users)
       .set({
@@ -354,14 +424,36 @@ export async function verifyAndRecordBurn(
         lastBurnDate: burnDate,
         lastBurnAt: new Date(),
         badgeCount: lockedUser.badgeCount + insertedBadgeCount,
+        ...(shieldsConsumedInBurn > 0 ? {
+          streakShields: sql`GREATEST(${users.streakShields} - ${shieldsConsumedInBurn}, 0)`,
+          streakShieldActive: sql`CASE WHEN ${users.streakShields} > ${shieldsConsumedInBurn} THEN true ELSE false END`,
+        } : {}),
         updatedAt: new Date(),
       })
       .where(eq(users.id, lockedUser.id));
 
-    return record!;
+    // Re-read user's authoritative XP/level after ALL grants (burn + badge + challenge + lucky)
+    const [finalUser] = await dbTx
+      .select({ xp: users.xp, level: users.level, streakShields: users.streakShields })
+      .from(users)
+      .where(eq(users.id, lockedUser.id))
+      .limit(1);
+
+    if (!finalUser) throw new Error('USER_NOT_FOUND_AFTER_BURN');
+
+    return {
+      record: record!,
+      totalXpThisBurn,
+      finalXp: Number(finalUser.xp),
+      finalLevel: finalUser.level,
+      leveledUp: finalUser.level > lockedUser.level,
+      shieldsAwarded: finalUser.streakShields - lockedUser.streakShields,
+      challengeResults,
+      luckyDrop,
+    };
   });
 
-  securityLog({ eventType: 'BURN_VERIFIED', walletAddress, severity: 'INFO', details: { signature, burnAmount: burnAmountStr, feeAmount: feeAmountStr, streak: newStreak, badges: newBadges.length } });
+  securityLog({ eventType: 'BURN_VERIFIED', walletAddress, severity: 'INFO', details: { signature, burnAmount: burnAmountStr, feeAmount: feeAmountStr, streak: newStreak, badges: newBadges.length, xp: burnRecord.totalXpThisBurn } });
 
   // Invalidate community stats caches so totals reflect this burn immediately
   await Promise.allSettled([
@@ -370,14 +462,24 @@ export async function verifyAndRecordBurn(
   ]);
 
   // Best-effort referral qualification check (does not block burn success).
-  await evaluateReferralQualification(burnRecord.userId).catch(() => {});
+  evaluateReferralQualification(burnRecord.record.userId).catch((err) => {
+    console.error('[referral] qualification check failed:', err?.message ?? err);
+  });
 
   return {
-    burnId: burnRecord.id,
+    burnId: burnRecord.record.id,
     status: 'VERIFIED',
     newStreak,
     longestStreak,
     lifetimeBurned: newLifetimeBurnedStr,
     badgesEarned: newBadges.map(b => ({ id: b.id, name: b.name })),
+    xpEarned: burnRecord.totalXpThisBurn,
+    totalXp: burnRecord.finalXp,
+    level: burnRecord.finalLevel,
+    levelTitle: getLevelTitle(burnRecord.finalLevel),
+    leveledUp: burnRecord.leveledUp,
+    shieldsAwarded: burnRecord.shieldsAwarded,
+    challengeResults: burnRecord.challengeResults,
+    luckyDrop: burnRecord.luckyDrop.dropped ? burnRecord.luckyDrop : undefined,
   };
 }

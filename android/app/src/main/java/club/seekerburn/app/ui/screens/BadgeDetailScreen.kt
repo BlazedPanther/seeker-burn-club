@@ -178,7 +178,8 @@ fun BadgeDetailScreen(
         claimError = null
         try {
             var mintDone = false
-            repeat(120) {
+            repeat(120) { pollIdx ->
+                if (!isClaiming) return@repeat
                 delay(5000L)
                 try {
                     val s = badgesViewModel.getClaimStatus(badgeId)

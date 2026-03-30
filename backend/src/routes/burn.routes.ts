@@ -9,8 +9,8 @@ import { redis } from '../lib/redis.js';
 
 const submitSchema = z.object({
   signature: z.string().min(64).max(88),
-  burnAmount: z.string().regex(/^\d+(\.\d+)?$/, 'Invalid burn amount format'),
-  feeAmount: z.string().regex(/^\d+(\.\d+)?$/, 'Invalid fee amount format'),
+  burnAmount: z.string().regex(/^(0(\.\d+)?|[1-9]\d*(\.\d+)?)$/, 'Invalid burn amount format'),
+  feeAmount: z.string().regex(/^(0(\.\d+)?|[1-9]\d*(\.\d+)?)$/, 'Invalid fee amount format'),
   clientTimestamp: z.string(),
 });
 
@@ -59,6 +59,14 @@ export async function burnRoutes(fastify: FastifyInstance) {
         longestStreak: result.longestStreak,
         lifetimeBurned: result.lifetimeBurned,
         badgesEarned: result.badgesEarned,
+        xpEarned: result.xpEarned,
+        totalXp: result.totalXp,
+        level: result.level,
+        levelTitle: result.levelTitle,
+        leveledUp: result.leveledUp,
+        shieldsAwarded: result.shieldsAwarded,
+        luckyDrop: result.luckyDrop ?? null,
+        challengeResults: result.challengeResults ?? null,
         submittedAt: new Date().toISOString(),
       });
     } catch (err: unknown) {

@@ -184,6 +184,44 @@ class SolanaService @Inject constructor() {
         return@withContext withSignaturePlaceholder(tx.serialize())
     }
 
+    /**
+     * Build a native SOL transfer to the treasury wallet for shield purchases.
+     */
+    suspend fun buildSolTransferTransaction(
+        walletAddress: String,
+        lamports: Long,
+    ): ByteArray = withContext(Dispatchers.IO) {
+        val wallet = PublicKey(walletAddress)
+        val treasury = PublicKey(SeekerBurnConfig.TREASURY_WALLET)
+        val recentBlockhash = connection.getLatestBlockhash()
+
+        val tx = Transaction(
+            recentBlockhash,
+            listOf(buildSystemTransferInstruction(wallet, treasury, lamports)),
+            wallet,
+        )
+        return@withContext withSignaturePlaceholder(tx.serialize())
+    }
+
+    /**
+     * Build a SKR token transfer to treasury ATA for shield purchases (SKR currency).
+     */
+    suspend fun buildSkrShopTransaction(
+        walletAddress: String,
+        amountBaseUnits: Long,
+    ): ByteArray = withContext(Dispatchers.IO) {
+        val wallet = PublicKey(walletAddress)
+        val userATA = deriveATA(wallet, skrMint)
+        val recentBlockhash = connection.getLatestBlockhash()
+
+        val tx = Transaction(
+            recentBlockhash,
+            listOf(buildSplTransferInstruction(userATA, treasuryATA, wallet, amountBaseUnits)),
+            wallet,
+        )
+        return@withContext withSignaturePlaceholder(tx.serialize())
+    }
+
     // ── Raw SPL instruction builders ──
 
     private fun buildSplBurnInstruction(
@@ -223,6 +261,23 @@ class SolanaService @Inject constructor() {
 
     private fun putLongLE(buf: ByteArray, offset: Int, value: Long) {
         for (i in 0 until 8) buf[offset + i] = (value shr (i * 8) and 0xFF).toByte()
+    }
+
+    private fun buildSystemTransferInstruction(
+        from: PublicKey, to: PublicKey, lamports: Long,
+    ): Instruction {
+        // SystemProgram.Transfer instruction: index 2 (u32 LE) + lamports (u64 LE)
+        val data = ByteArray(12)
+        data[0] = 2; data[1] = 0; data[2] = 0; data[3] = 0 // instruction type 2 = Transfer
+        putLongLE(data, 4, lamports)
+        return BaseInstruction(
+            data,
+            listOf(
+                AccountMeta.signerAndWritable(from),  // funding account
+                AccountMeta.writable(to),              // recipient
+            ),
+            PublicKey("11111111111111111111111111111111"), // System Program
+        )
     }
 
     /**

@@ -24,6 +24,7 @@ enum class LeaderboardTab(val label: String, val apiKey: String) {
     STREAK("Streak", "streak"),
     LIFETIME("Lifetime", "lifetime"),
     BADGES("Badges", "badges"),
+    XP("XP", "xp"),
     REFERRALS("Referrals", "referrals"),
 }
 

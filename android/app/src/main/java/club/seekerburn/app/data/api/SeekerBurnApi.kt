@@ -50,4 +50,16 @@ interface SeekerBurnApi {
     suspend fun getReferralOverview(): ReferralOverview
     suspend fun getReferralHistory(): List<ReferralHistoryItem>
     suspend fun applyReferralCode(code: String): ReferralApplyResponse
+
+    // Challenges
+    suspend fun getChallenges(): ChallengesResponse
+
+    // Shield Shop
+    suspend fun getShieldPacks(): ShieldShopResponse
+    suspend fun purchaseShield(request: ShieldPurchaseRequest): ShieldPurchaseResponse
+    suspend fun getShieldBalance(): ShieldBalanceResponse
+
+    // Lucky Burns
+    suspend fun getLuckyInventory(): InventoryResponse
+    suspend fun getLuckyHistory(): LuckyDropHistoryResponse
 }

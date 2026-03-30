@@ -33,7 +33,7 @@ object Routes {
 
     const val BURN_CONFIRM = "burn_confirm"
     const val TX_PENDING = "tx_pending/{signature}?burnAmount={burnAmount}&feeAmount={feeAmount}"
-    const val TX_SUCCESS = "tx_success/{signature}/{burnAmount}/{newStreak}?badgeEarned={badgeEarned}&badgeEarnedId={badgeEarnedId}"
+    const val TX_SUCCESS = "tx_success/{signature}/{burnAmount}/{newStreak}?badgeEarned={badgeEarned}&badgeEarnedId={badgeEarnedId}&luckyDropName={luckyDropName}&luckyDropItemId={luckyDropItemId}&luckyDropRarity={luckyDropRarity}&luckyDropEffect={luckyDropEffect}&xpEarned={xpEarned}&newLevel={newLevel}&levelTitle={levelTitle}&leveledUp={leveledUp}"
     const val TX_FAILURE = "tx_failure/{errorType}?errorDetail={errorDetail}"
     const val BADGE_DETAIL = "badge_detail/{badgeId}"
     const val PERK_DETAIL = "perk_detail/{perkId}"
@@ -43,6 +43,9 @@ object Routes {
     const val SETTINGS = "settings"
     const val REFERRALS = "referrals"
     const val ABOUT = "about"
+    const val CHALLENGES = "challenges"
+    const val SHIELD_SHOP = "shield_shop"
+    const val INVENTORY = "inventory"
 
     fun txPending(sig: String, burnAmount: String? = null, feeAmount: String? = null): String {
         val base = "tx_pending/$sig"
@@ -58,11 +61,27 @@ object Routes {
         newStreak: Int = 1,
         badgeEarned: String? = null,
         badgeEarnedId: String? = null,
+        luckyDropName: String? = null,
+        luckyDropItemId: String? = null,
+        luckyDropRarity: String? = null,
+        luckyDropEffect: String? = null,
+        xpEarned: Int? = null,
+        newLevel: Int? = null,
+        levelTitle: String? = null,
+        leveledUp: Boolean? = null,
     ): String {
         val base = "tx_success/$sig/$burnAmount/$newStreak"
         val params = mutableListOf<String>()
         if (badgeEarned != null) params.add("badgeEarned=$badgeEarned")
         if (badgeEarnedId != null) params.add("badgeEarnedId=$badgeEarnedId")
+        if (luckyDropName != null) params.add("luckyDropName=${Uri.encode(luckyDropName)}")
+        if (luckyDropItemId != null) params.add("luckyDropItemId=${Uri.encode(luckyDropItemId)}")
+        if (luckyDropRarity != null) params.add("luckyDropRarity=$luckyDropRarity")
+        if (luckyDropEffect != null) params.add("luckyDropEffect=${Uri.encode(luckyDropEffect)}")
+        if (xpEarned != null) params.add("xpEarned=$xpEarned")
+        if (newLevel != null) params.add("newLevel=$newLevel")
+        if (levelTitle != null) params.add("levelTitle=${Uri.encode(levelTitle)}")
+        if (leveledUp == true) params.add("leveledUp=true")
         return if (params.isNotEmpty()) "$base?${params.joinToString("&")}" else base
     }
 
@@ -150,6 +169,9 @@ fun SeekerBurnNavHost(
                 onNavigateToBadgeDetail = { navController.navigate(Routes.badgeDetail(it)) },
                 onNavigateToPerkDetail = { navController.navigate(Routes.perkDetail(it)) },
                 onNavigateToPerks = { navController.navigate(Routes.PERKS_LIST) },
+                onNavigateToChallenges = { navController.navigate(Routes.CHALLENGES) },
+                onNavigateToShop = { navController.navigate(Routes.SHIELD_SHOP) },
+                onNavigateToInventory = { navController.navigate(Routes.INVENTORY) },
                 initialTab = initialTab,
             )
         }
@@ -164,8 +186,8 @@ fun SeekerBurnNavHost(
                         popUpTo(Routes.MAIN)
                     }
                 },
-                onBurnSubmitted = { sig, newStreak, burnAmount, badgeEarned, badgeEarnedId ->
-                    navController.navigate(Routes.txSuccess(sig, burnAmount, newStreak, badgeEarned, badgeEarnedId)) {
+                onBurnSubmitted = { sig, newStreak, burnAmount, badgeEarned, badgeEarnedId, luckyName, luckyItemId, luckyRarity, luckyEffect, xpEarned, newLevel, levelTitle, leveledUp ->
+                    navController.navigate(Routes.txSuccess(sig, burnAmount, newStreak, badgeEarned, badgeEarnedId, luckyName, luckyItemId, luckyRarity, luckyEffect, xpEarned, newLevel, levelTitle, leveledUp)) {
                         popUpTo(Routes.MAIN)
                     }
                 },
@@ -225,6 +247,46 @@ fun SeekerBurnNavHost(
                     nullable = true
                     defaultValue = null
                 },
+                navArgument("luckyDropName") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("luckyDropItemId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("luckyDropRarity") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("luckyDropEffect") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("xpEarned") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("newLevel") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("levelTitle") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("leveledUp") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
             ),
         ) { backStack ->
             val sig = backStack.arguments?.getString("signature") ?: ""
@@ -232,12 +294,28 @@ fun SeekerBurnNavHost(
             val newStreak = backStack.arguments?.getInt("newStreak") ?: 1
             val badgeEarned = backStack.arguments?.getString("badgeEarned")
             val badgeEarnedId = backStack.arguments?.getString("badgeEarnedId")
+            val luckyDropName = backStack.arguments?.getString("luckyDropName")
+            val luckyDropItemId = backStack.arguments?.getString("luckyDropItemId")
+            val luckyDropRarity = backStack.arguments?.getString("luckyDropRarity")
+            val luckyDropEffect = backStack.arguments?.getString("luckyDropEffect")
+            val xpEarned = backStack.arguments?.getString("xpEarned")?.toIntOrNull()
+            val newLevel = backStack.arguments?.getString("newLevel")?.toIntOrNull()
+            val levelTitle = backStack.arguments?.getString("levelTitle")
+            val leveledUp = backStack.arguments?.getString("leveledUp") == "true"
             TransactionSuccessScreen(
                 signature = sig,
                 burnAmount = burnAmount,
                 newStreak = newStreak,
                 badgeEarned = badgeEarned,
                 badgeEarnedId = badgeEarnedId,
+                luckyDropName = luckyDropName,
+                luckyDropItemId = luckyDropItemId,
+                luckyDropRarity = luckyDropRarity,
+                luckyDropEffect = luckyDropEffect,
+                xpEarned = xpEarned,
+                newLevel = newLevel,
+                levelTitle = levelTitle,
+                leveledUp = leveledUp,
                 onViewExplorer = openUrl,
                 onClaimNft = { id ->
                     navController.navigate(Routes.main(tab = 1)) {
@@ -353,6 +431,25 @@ fun SeekerBurnNavHost(
             AboutScreen(
                 onBack = { navController.popBackStack() },
                 onOpenUrl = openUrl,
+            )
+        }
+
+        composable(Routes.CHALLENGES) {
+            ChallengesScreen(
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Routes.SHIELD_SHOP) {
+            ShieldShopScreen(
+                walletSender = walletSender,
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Routes.INVENTORY) {
+            InventoryScreen(
+                onBack = { navController.popBackStack() },
             )
         }
     }

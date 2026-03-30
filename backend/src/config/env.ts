@@ -59,6 +59,10 @@ const envSchema = z.object({
   REFERRAL_QUALIFY_BURN_DAYS: z.coerce.number().min(1).max(30).default(3),
   REFERRAL_QUALIFY_LIFETIME_SKR: z.coerce.number().min(1).default(100),
   REFERRAL_ENFORCE_SYBIL_CHECKS: envBoolean(true),
+
+  // Shop
+  SOL_PRICE_USD: z.coerce.number().positive().default(150),
+  SKR_PRICE_USD: z.coerce.number().positive().default(0.10),
 });
 
 export const env = envSchema.parse(process.env);

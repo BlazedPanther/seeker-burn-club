@@ -207,6 +207,102 @@ async function migrate() {
     )
   `;
 
+  // ── XP system tables ──
+  await sql`
+    CREATE TABLE IF NOT EXISTS xp_ledger (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id     UUID NOT NULL REFERENCES users(id),
+      amount      INTEGER NOT NULL,
+      reason      VARCHAR(50) NOT NULL,
+      ref_id      VARCHAR(100),
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS daily_challenge_progress (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id         UUID NOT NULL REFERENCES users(id),
+      challenge_date  DATE NOT NULL,
+      challenge_id    VARCHAR(30) NOT NULL,
+      completed       BOOLEAN NOT NULL DEFAULT false,
+      progress_value  NUMERIC(20,6) NOT NULL DEFAULT 0,
+      xp_awarded      INTEGER NOT NULL DEFAULT 0,
+      completed_at    TIMESTAMPTZ,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, challenge_date, challenge_id)
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS weekly_challenge_progress (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id         UUID NOT NULL REFERENCES users(id),
+      week_start      DATE NOT NULL,
+      challenge_id    VARCHAR(30) NOT NULL,
+      completed       BOOLEAN NOT NULL DEFAULT false,
+      progress_value  NUMERIC(20,6) NOT NULL DEFAULT 0,
+      xp_awarded      INTEGER NOT NULL DEFAULT 0,
+      completed_at    TIMESTAMPTZ,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, week_start, challenge_id)
+    )
+  `;
+
+  // ── Shield shop tables ──
+  await sql`
+    CREATE TABLE IF NOT EXISTS shield_purchases (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id         UUID NOT NULL REFERENCES users(id),
+      wallet_address  VARCHAR(44) NOT NULL,
+      tx_signature    VARCHAR(88) NOT NULL UNIQUE,
+      shield_count    INTEGER NOT NULL,
+      price_lamports  NUMERIC(20,0) NOT NULL,
+      price_usd       NUMERIC(10,2) NOT NULL,
+      currency        VARCHAR(10) NOT NULL DEFAULT 'SOL',
+      status          VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+      verified_at     TIMESTAMPTZ,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  // ── Lucky drops tables ──
+  await sql`
+    CREATE TABLE IF NOT EXISTS lucky_drops (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id     UUID NOT NULL REFERENCES users(id),
+      burn_id     UUID NOT NULL,
+      item_id     VARCHAR(40) NOT NULL,
+      rarity      VARCHAR(20) NOT NULL,
+      applied     BOOLEAN NOT NULL DEFAULT false,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS active_buffs (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id         UUID NOT NULL REFERENCES users(id),
+      buff_type       VARCHAR(40) NOT NULL,
+      remaining_uses  INTEGER NOT NULL DEFAULT 1,
+      metadata        JSONB DEFAULT '{}',
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at      TIMESTAMPTZ
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS user_inventory (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id     UUID NOT NULL REFERENCES users(id),
+      item_id     VARCHAR(40) NOT NULL,
+      quantity    INTEGER NOT NULL DEFAULT 1,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, item_id)
+    )
+  `;
+
   // ── Streak Shield ──
   await sql.unsafe(`ALTER TABLE users ADD COLUMN IF NOT EXISTS streak_shield_active BOOLEAN NOT NULL DEFAULT false`).catch(() => {});
 
@@ -221,6 +317,15 @@ async function migrate() {
 
   // ── Profile title for perk rewards ──
   await sql.unsafe(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_title VARCHAR(40)`).catch(() => {});
+
+  // ── XP & level columns ──
+  await sql.unsafe(`ALTER TABLE users ADD COLUMN IF NOT EXISTS xp NUMERIC(20,0) NOT NULL DEFAULT 0`).catch(() => {});
+  await sql.unsafe(`ALTER TABLE users ADD COLUMN IF NOT EXISTS level INTEGER NOT NULL DEFAULT 1`).catch(() => {});
+  await sql.unsafe(`ALTER TABLE users ADD COLUMN IF NOT EXISTS streak_shields INTEGER NOT NULL DEFAULT 0`).catch(() => {});
+
+  // ── Badge mint tracking columns ──
+  await sql.unsafe(`ALTER TABLE badges ADD COLUMN IF NOT EXISTS nft_mint_started_at TIMESTAMPTZ`).catch(() => {});
+  await sql.unsafe(`ALTER TABLE badges ADD COLUMN IF NOT EXISTS nft_mint_failure_reason TEXT`).catch(() => {});
 
   // ── New columns for referral system ──
   await sql.unsafe(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(20)`).catch(() => {});
@@ -271,6 +376,22 @@ async function migrate() {
   await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals (referrer_user_id, created_at)`).catch(() => {});
   await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_referrals_status ON referrals (status)`).catch(() => {});
   await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_referrals_code ON referrals (referral_code)`).catch(() => {});
+
+  // XP system
+  await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_users_xp ON users (xp)`).catch(() => {});
+  await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_users_level ON users (level)`).catch(() => {});
+  await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_xp_ledger_user ON xp_ledger (user_id, created_at)`).catch(() => {});
+  await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_daily_challenge_date ON daily_challenge_progress (user_id, challenge_date)`).catch(() => {});
+  await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_weekly_challenge_week ON weekly_challenge_progress (user_id, week_start)`).catch(() => {});
+
+  // Shield purchases
+  await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_shield_purchases_user ON shield_purchases (user_id, created_at)`).catch(() => {});
+  await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_shield_purchases_status ON shield_purchases (status)`).catch(() => {});
+
+  // Lucky drops & buffs
+  await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_lucky_drops_user ON lucky_drops (user_id)`).catch(() => {});
+  await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_lucky_drops_burn ON lucky_drops (burn_id)`).catch(() => {});
+  await sql.unsafe(`CREATE INDEX IF NOT EXISTS idx_active_buffs_user ON active_buffs (user_id, buff_type)`).catch(() => {});
 
   // ── Alter existing columns: widen device_fingerprint from VARCHAR(64) → VARCHAR(255) ──
   // Safe for existing databases where tables already exist (CREATE TABLE IF NOT EXISTS is a no-op).

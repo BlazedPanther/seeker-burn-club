@@ -1,0 +1,24 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Double lightning — Double/Triple boost -->
+    <!-- Left bolt -->
+    <path
+        android:pathData="M10,2L4,12H8L7,20L14,10H10Z"
+        android:fillColor="#FFD740"/>
+    <!-- Right bolt -->
+    <path
+        android:pathData="M16,2L10,12H14L13,20L20,10H16Z"
+        android:fillColor="#FFA000"/>
+    <!-- Spark pixels -->
+    <path
+        android:pathData="M3,8L4,8L4,9L3,9Z"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.5"/>
+    <path
+        android:pathData="M20,6L21,6L21,7L20,7Z"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.5"/>
+</vector>

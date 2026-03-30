@@ -5,6 +5,7 @@ import { users, badges, burns } from '../db/schema.js';
 import { todayUTC, yesterdayUTC } from '../lib/solana.js';
 import { BADGE_DEFINITIONS } from '../lib/badges.js';
 import { redis } from '../lib/redis.js';
+import { xpToNextLevel, getLevelTitle } from '../services/xp.service.js';
 
 /** Raw SQL rank result row. */
 interface RankRow { rank: string }
@@ -41,7 +42,7 @@ export async function profileRoutes(fastify: FastifyInstance) {
       user.lastBurnDate &&
       user.lastBurnDate !== today &&
       user.lastBurnDate !== yesterday &&
-      !user.streakShieldActive
+      user.streakShields <= 0
     ) {
       streakBroken = true;
       previousStreak = user.currentStreak;
@@ -147,6 +148,9 @@ export async function profileRoutes(fastify: FastifyInstance) {
     const perfectRow = perfectMonthsResult[0] as { perfect_months: number } | undefined;
     const referralRow = referralStatsResult[0] as { invited: number; qualified: number; pending: number } | undefined;
 
+    const totalXp = Number(user.xp ?? 0);
+    const levelInfo = xpToNextLevel(totalXp);
+
     return reply.code(200).send({
       walletAddress: user.walletAddress,
       currentStreak: effectiveStreak,
@@ -156,6 +160,12 @@ export async function profileRoutes(fastify: FastifyInstance) {
       lifetimeBurned: user.lifetimeBurned,
       totalDeposited: user.totalDeposited,
       streakShieldActive: user.streakShieldActive,
+      streakShields: user.streakShields ?? 0,
+      xp: totalXp,
+      level: levelInfo.currentLevel,
+      levelTitle: getLevelTitle(levelInfo.currentLevel),
+      xpIntoLevel: levelInfo.xpIntoLevel,
+      xpToNextLevel: levelInfo.xpNeeded,
       todayBurned: !!todayBurn,
       todayBurnSignature: todayBurn?.signature ?? null,
       lastBurnAt: user.lastBurnAt?.toISOString() ?? null,

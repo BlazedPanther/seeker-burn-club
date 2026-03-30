@@ -1,0 +1,31 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Four-leaf clover — luck -->
+    <path
+        android:pathData="M12,12C12,12 8,8 5.5,10.5C3,13 7,17 12,12Z"
+        android:fillColor="#4ADE80"/>
+    <path
+        android:pathData="M12,12C12,12 16,8 18.5,10.5C21,13 17,17 12,12Z"
+        android:fillColor="#22C55E"/>
+    <path
+        android:pathData="M12,12C12,12 8,16 10.5,18.5C13,21 17,17 12,12Z"
+        android:fillColor="#16A34A"/>
+    <path
+        android:pathData="M12,12C12,12 16,16 13.5,18.5C11,21 7,17 12,12Z"
+        android:fillColor="#4ADE80"
+        android:fillAlpha="0.8"/>
+    <!-- Stem -->
+    <path
+        android:pathData="M12,12L12,20"
+        android:strokeColor="#16A34A"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"/>
+    <!-- Sparkle -->
+    <path
+        android:pathData="M12,4L12.5,6L13,4L12.5,2Z"
+        android:fillColor="#FFD740"
+        android:fillAlpha="0.8"/>
+</vector>
