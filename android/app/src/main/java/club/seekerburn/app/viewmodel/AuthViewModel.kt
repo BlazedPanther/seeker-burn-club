@@ -34,6 +34,7 @@ class AuthViewModel @Inject constructor(
     val isLoggedIn: Flow<Boolean> = sessionStore.authToken.map { it != null }
     val walletAddress: Flow<String?> = sessionStore.walletAddress
     val isOnboardingComplete: Flow<Boolean> = sessionStore.isOnboardingComplete
+    val isTermsAccepted: Flow<Boolean> = sessionStore.isTermsAccepted
 
     /**
      * Full connect flow: Wallet authorize → SIWS → backend verify → save session.
@@ -98,6 +99,12 @@ class AuthViewModel @Inject constructor(
     fun completeOnboarding() {
         viewModelScope.launch {
             sessionStore.completeOnboarding()
+        }
+    }
+
+    fun acceptTerms() {
+        viewModelScope.launch {
+            sessionStore.acceptTerms()
         }
     }
 }

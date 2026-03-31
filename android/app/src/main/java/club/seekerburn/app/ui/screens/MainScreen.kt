@@ -50,6 +50,7 @@ fun MainScreen(
     onNavigateToChallenges: () -> Unit,
     onNavigateToShop: () -> Unit,
     onNavigateToInventory: () -> Unit,
+    onNavigateToHowItWorks: () -> Unit,
     initialTab: Int = 0,
 ) {
     val colors = SeekerBurnTheme.colors
@@ -201,6 +202,7 @@ fun MainScreen(
                     onChallenges = onNavigateToChallenges,
                     onShop = onNavigateToShop,
                     onInventory = onNavigateToInventory,
+                    onHowItWorks = onNavigateToHowItWorks,
                     onDisconnect = { authViewModel.disconnect() },
                 )
                 }

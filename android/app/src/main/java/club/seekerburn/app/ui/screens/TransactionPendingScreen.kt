@@ -110,7 +110,6 @@ fun TransactionPendingScreen(
                                         signature = signature,
                                         burnAmount = burnAmount,
                                         feeAmount = feeAmount,
-                                        clientTimestamp = System.currentTimeMillis().toString(),
                                     )
                                 )
                                 statusText = "Confirmed!"
@@ -157,7 +156,6 @@ fun TransactionPendingScreen(
                                         signature = signature,
                                         burnAmount = burnAmount,
                                         feeAmount = feeAmount,
-                                        clientTimestamp = System.currentTimeMillis().toString(),
                                     )
                                 )
                                 statusText = "Confirmed!"
@@ -191,7 +189,6 @@ fun TransactionPendingScreen(
                         signature = signature,
                         burnAmount = burnAmount,
                         feeAmount = feeAmount,
-                        clientTimestamp = System.currentTimeMillis().toString(),
                     )
                 )
                 statusText = "Confirmed!"

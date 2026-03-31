@@ -10,13 +10,13 @@
  *  - Lucky Burns: random drops with XP rewards
  *  - Level-up reward: free shield every 5 levels
  *
- * Level formula (infinite, soft-exponential):
- *   XP for level N = 200 * N^1.5  (per-level cost)
- *   Cumulative XP for level N ≈ sum of 200*k^1.5 for k=1..N-1
+ * Level formula (infinite, gentle curve):
+ *   XP for level N = 150 * N^1.2  (per-level cost)
+ *   Cumulative XP for level N ≈ sum of 150*k^1.2 for k=1..N-1
  *
- *   Level 2:  200 XP    Level 10:  3,760 XP    Level 25:  18,800 XP
- *   Level 50: 67,000 XP Level 100: 198,000 XP  Level 200: 565,000 XP
- *   Level 500: 2.2M XP  Level 999: 6.3M XP     ∞ possible
+ *   Level 10:  ~8,500 XP    Level 30:   ~76,000 XP
+ *   Level 50: ~230,000 XP   Level 100: ~1,000,000 XP
+ *   Level 200: ~4,500,000 XP Level 500: ~28,000,000 XP  ∞ possible
  *
  * Streak multiplier: day 1–6 = 1.0x, 7–29 = 1.5x, 30–99 = 2.0x, 100+ = 3.0x
  */
@@ -61,29 +61,71 @@ export const DAILY_SWEEP_BONUS_XP = 500;
 // ── Level titles — infinite tiers ───────────────────────────
 
 export const LEVEL_TITLES = [
-  { minLevel: 500, title: 'Singularity' },
-  { minLevel: 300, title: 'Eternal Flame' },
-  { minLevel: 200, title: 'Primal Fire' },
-  { minLevel: 150, title: 'World Blaze' },
-  { minLevel: 100, title: 'Entropy' },
-  { minLevel: 80,  title: 'Ash God' },
-  { minLevel: 60,  title: 'Supernova' },
-  { minLevel: 45,  title: 'Hellfire' },
-  { minLevel: 30,  title: 'Inferno' },
-  { minLevel: 20,  title: 'Flame' },
-  { minLevel: 10,  title: 'Ember' },
-  { minLevel: 5,   title: 'Spark' },
-  { minLevel: 1,   title: 'Ash' },
+  // ── MYTHIC (5000+) ──
+  { minLevel: 5000, title: 'The Burn' },
+  { minLevel: 3000, title: 'God Flame' },
+  { minLevel: 2000, title: 'Immortal' },
+  { minLevel: 1500, title: 'Mythic' },
+  // ── LEGENDARY (500–1000) ──
+  { minLevel: 1000, title: 'Legend' },
+  { minLevel: 900,  title: 'Absolute Zero' },
+  { minLevel: 750,  title: 'Burn Deity' },
+  { minLevel: 600,  title: 'Multiverse' },
+  { minLevel: 500,  title: 'Singularity' },
+  { minLevel: 450,  title: 'Cosmic Void' },
+  { minLevel: 400,  title: 'Omega Flame' },
+  { minLevel: 350,  title: 'Transcendence' },
+  { minLevel: 300,  title: 'Void Burner' },
+  { minLevel: 275,  title: 'Quantum Burn' },
+  { minLevel: 250,  title: 'Genesis Blaze' },
+  { minLevel: 225,  title: 'Astral Fire' },
+  // ── EPIC (100–200) ──
+  { minLevel: 200,  title: 'Eternal Flame' },
+  { minLevel: 185,  title: 'Primordial' },
+  { minLevel: 175,  title: 'Primal Fire' },
+  { minLevel: 160,  title: 'Dimension Burn' },
+  { minLevel: 150,  title: 'Cosmic Burn' },
+  { minLevel: 140,  title: 'Starforger' },
+  { minLevel: 130,  title: 'World Blaze' },
+  { minLevel: 120,  title: 'Galactic Flame' },
+  { minLevel: 110,  title: 'Nova King' },
+  { minLevel: 105,  title: 'Neutron Star' },
+  { minLevel: 100,  title: 'Entropy' },
+  { minLevel: 95,   title: 'Dark Matter' },
+  // ── RARE (50–100) ──
+  { minLevel: 90,   title: 'Plasma Core' },
+  { minLevel: 85,   title: 'Thermonuclear' },
+  { minLevel: 80,   title: 'Meltdown' },
+  { minLevel: 75,   title: 'Obsidian' },
+  { minLevel: 70,   title: 'Ash God' },
+  { minLevel: 65,   title: 'Magma Lord' },
+  { minLevel: 60,   title: 'Solar Flare' },
+  { minLevel: 55,   title: 'Stellar Core' },
+  { minLevel: 50,   title: 'Supernova' },
+  // ── UNCOMMON (20–50) ──
+  { minLevel: 45,   title: 'Pyroclasm' },
+  { minLevel: 40,   title: 'Hellfire' },
+  { minLevel: 35,   title: 'Firestorm' },
+  { minLevel: 30,   title: 'Inferno' },
+  { minLevel: 25,   title: 'Wildfire' },
+  { minLevel: 20,   title: 'Blaze' },
+  // ── COMMON (1–20) ──
+  { minLevel: 16,   title: 'Flame' },
+  { minLevel: 12,   title: 'Kindling' },
+  { minLevel: 8,    title: 'Ember' },
+  { minLevel: 5,    title: 'Spark' },
+  { minLevel: 3,    title: 'Cinder' },
+  { minLevel: 1,    title: 'Ash' },
 ] as const;
 
 // ── Level math (infinite soft-exponential) ──────────────────
 
 /**
  * XP cost for a single level (to go from level N to N+1).
- * Uses 200 * N^1.5 — grows steadily but never caps out.
+ * Uses 150 * N^1.2 — gentle curve that rewards consistent play.
  */
 function xpCostForSingleLevel(n: number): number {
-  return Math.round(200 * Math.pow(n, 1.5));
+  return Math.round(150 * Math.pow(n, 1.2));
 }
 
 /** Total XP required to reach level N (cumulative). Level 1 = 0 XP. */

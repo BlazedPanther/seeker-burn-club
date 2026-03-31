@@ -40,11 +40,11 @@ import club.seekerburn.app.util.FormatUtils
 import club.seekerburn.app.viewmodel.AuthState
 import club.seekerburn.app.viewmodel.GlobalStatsViewModel
 import club.seekerburn.app.viewmodel.HomeViewModel
+import club.seekerburn.app.model.ChallengeProgress
 import kotlinx.coroutines.launch
 import club.seekerburn.app.ui.goals.GoalsEngine
 import java.text.NumberFormat
-import java.time.ZoneOffset
-import java.time.ZonedDateTime
+
 import java.util.Locale
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
@@ -56,7 +56,7 @@ import coil.request.ImageRequest
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.delay
-import java.time.temporal.IsoFields
+
 
 @Composable
 fun HomeTab(
@@ -799,84 +799,41 @@ fun HomeTab(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // ── Goals: compute once, pass down ──
-        val nowLocal by produceState(initialValue = ZonedDateTime.now()) {
-            while (true) {
-                value = ZonedDateTime.now()
-                delay(30_000L)
-            }
-        }
-        val nowUtc by produceState(initialValue = ZonedDateTime.now(ZoneOffset.UTC)) {
-            while (true) {
-                value = ZonedDateTime.now(ZoneOffset.UTC)
-                delay(30_000L)
-            }
-        }
-        val dailyMissions  = remember(nowLocal.toLocalDate(), uiState.hasBurnedToday, uiState.lifetimeBurned, uiState.currentStreak) {
-            val now = nowLocal
-            GoalsEngine.dailyMissions(uiState, now)
-        }
-        val weeklyQuests = remember(
-            nowUtc.get(IsoFields.WEEK_BASED_YEAR),
-            nowUtc.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR),
-            uiState.weeklyBurnDays,
-            uiState.weeklyBurnSKR,
-            uiState.lifetimeBurned,
-        ) {
-            val now = nowUtc
-            GoalsEngine.weeklyQuests(uiState, now)
-        }
+        // ── Milestones ──
         val milestones = remember(uiState.currentStreak, uiState.lifetimeBurned) {
             GoalsEngine.milestones(uiState)
         }
 
-        // ── Daily Missions ──
-        BurnCard {
-            SectionHeader(title = "Daily Missions")
-            Text(
-                text = "Resets at midnight (local) · ${nowLocal.toLocalDate()}",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.textTertiary,
-                fontSize = 9.sp,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-            dailyMissions.forEach { m ->
-                MissionRow(
-                    title = m.title,
-                    description = m.description,
-                    currentLabel = m.currentLabel,
-                    progress = m.progress,
-                    isCompleted = m.isCompleted,
-                )
+        // ── Daily Challenges ──
+        if (uiState.dailyChallenges.isNotEmpty()) {
+            BurnCard {
+                SectionHeader(title = "Daily Challenges")
+                if (uiState.dailySweep) {
+                    Text(
+                        text = "\u2728 DAILY SWEEP \u2014 +500 XP bonus!",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.success,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                }
+                uiState.dailyChallenges.forEach { c ->
+                    HomeChallengeRow(challenge = c)
+                }
             }
+            Spacer(modifier = Modifier.height(12.dp))
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ── Weekly Quests ──
-        BurnCard {
-            val now = nowUtc
-            val weekMonday  = now.toLocalDate().minusDays(now.dayOfWeek.value.toLong() - 1)
-            SectionHeader(title = "Weekly Quests")
-            Text(
-                text = "Resets Monday UTC · $weekMonday",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.textTertiary,
-                fontSize = 9.sp,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-            weeklyQuests.forEach { q ->
-                MissionRow(
-                    title = q.title,
-                    description = q.description,
-                    currentLabel = q.currentLabel,
-                    progress = q.progress,
-                    isCompleted = q.isCompleted,
-                )
+        // ── Weekly Challenges ──
+        if (uiState.weeklyChallenges.isNotEmpty()) {
+            BurnCard {
+                SectionHeader(title = "Weekly Challenges")
+                uiState.weeklyChallenges.forEach { c ->
+                    HomeChallengeRow(challenge = c)
+                }
             }
+            Spacer(modifier = Modifier.height(12.dp))
         }
-
-        Spacer(modifier = Modifier.height(12.dp))
 
         // ── Milestones ──
         BurnCard {
@@ -1096,6 +1053,88 @@ private fun MissionRow(
             blockCount = 16,
             height = 10.dp,
         )
+    }
+}
+
+/** Compact challenge row for the home screen. */
+@Composable
+private fun HomeChallengeRow(challenge: ChallengeProgress) {
+    val colors = SeekerBurnTheme.colors
+    val done = challenge.completed
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .background(if (done) colors.success.copy(alpha = 0.04f) else Color.Transparent)
+            .pixelBorder(
+                color = if (done) colors.success.copy(alpha = 0.25f) else colors.border.copy(alpha = 0.15f),
+                glowColor = Color.Transparent,
+                borderWidth = 1.dp,
+            )
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = challenge.title,
+                fontFamily = PressStart2P,
+                fontSize = 9.sp,
+                color = if (done) colors.success else colors.primary,
+                modifier = Modifier.weight(1f),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (challenge.xpReward > 0) {
+                    Text(
+                        text = "+${challenge.xpReward} XP",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 8.sp,
+                        color = colors.accent,
+                    )
+                }
+                if (challenge.shieldReward > 0) {
+                    Text(
+                        text = "+${challenge.shieldReward} \uD83D\uDEE1\uFE0F",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 8.sp,
+                        color = colors.accent,
+                    )
+                }
+            }
+        }
+        if (challenge.description.isNotBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = challenge.description,
+                style = MaterialTheme.typography.bodySmall,
+                fontSize = 10.sp,
+                color = colors.textSecondary,
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PixelProgressBar(
+                progress = challenge.progressFraction,
+                fillColor = if (done) colors.success else colors.primary,
+                trackColor = colors.surfaceElevated2,
+                borderColor = colors.border,
+                blockCount = 16,
+                height = 10.dp,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = if (done) "✓" else "${challenge.progress.toInt()}/${challenge.target.toInt()}",
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 8.sp,
+                color = if (done) colors.success else colors.textTertiary,
+            )
+        }
     }
 }
 

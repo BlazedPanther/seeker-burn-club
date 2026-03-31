@@ -57,12 +57,6 @@ class ShopViewModel @Inject constructor(
         }
     }
 
-    fun toggleCurrency() {
-        _uiState.update {
-            it.copy(selectedCurrency = if (it.selectedCurrency == "SOL") "SKR" else "SOL")
-        }
-    }
-
     fun purchaseShield(sender: ActivityResultSender, pack: ShieldPack) {
         viewModelScope.launch {
             _uiState.update { it.copy(purchasing = true, purchaseError = null, purchaseSuccess = null) }
@@ -70,17 +64,11 @@ class ShopViewModel @Inject constructor(
                 val wallet = sessionStore.getWalletAddress()
                     ?: throw IllegalStateException("No wallet connected")
 
-                val currency = _uiState.value.selectedCurrency
                 val quote = _uiState.value.priceQuote
 
-                // Build the appropriate transaction based on currency
-                val txBytes = if (currency == "SKR") {
-                    val baseUnits = pack.priceSkrBaseUnits.toLongOrNull()
-                        ?: throw IllegalStateException("Invalid SKR price")
-                    solanaService.buildSkrShopTransaction(wallet, baseUnits)
-                } else {
-                    solanaService.buildSolTransferTransaction(wallet, pack.priceLamports)
-                }
+                val baseUnits = pack.priceSkrBaseUnits.toLongOrNull()
+                    ?: throw IllegalStateException("Invalid SKR price")
+                val txBytes = solanaService.buildSkrShopTransaction(wallet, baseUnits)
 
                 val signature = walletAdapterService.signAndSendTransaction(sender, txBytes)
 
@@ -88,7 +76,6 @@ class ShopViewModel @Inject constructor(
                 val result = api.purchaseShield(ShieldPurchaseRequest(
                     signature = signature,
                     packId = pack.id,
-                    currency = currency,
                     priceQuote = quote,
                 ))
                 _uiState.update {
@@ -117,7 +104,6 @@ data class ShopUiState(
     val packs: List<ShieldPack> = emptyList(),
     val maxShields: Int = 10,
     val currentShields: Int = 0,
-    val selectedCurrency: String = "SOL",
     val purchasing: Boolean = false,
     val purchaseError: String? = null,
     val purchaseSuccess: String? = null,

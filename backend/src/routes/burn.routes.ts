@@ -11,7 +11,6 @@ const submitSchema = z.object({
   signature: z.string().min(64).max(88),
   burnAmount: z.string().regex(/^(0(\.\d+)?|[1-9]\d*(\.\d+)?)$/, 'Invalid burn amount format'),
   feeAmount: z.string().regex(/^(0(\.\d+)?|[1-9]\d*(\.\d+)?)$/, 'Invalid fee amount format'),
-  clientTimestamp: z.string(),
 });
 
 export async function burnRoutes(fastify: FastifyInstance) {

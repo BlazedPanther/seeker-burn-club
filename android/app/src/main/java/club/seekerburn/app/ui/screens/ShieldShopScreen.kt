@@ -1,6 +1,5 @@
-package club.seekerburn.app.ui.screens
+﻿package club.seekerburn.app.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -143,33 +142,29 @@ fun ShieldShopScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // Currency toggle
-                    CurrencyToggle(
-                        selected = uiState.selectedCurrency,
-                        onToggle = { viewModel.toggleCurrency() },
-                    )
-
-                    // Live price indicator
-                    if (uiState.priceSource != "fallback") {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (uiState.priceSource == "live") "Live prices" else "Cached prices",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (uiState.priceSource == "live") colors.success else colors.textTertiary,
-                            fontSize = 9.sp,
-                        )
-                    }
-
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    Text(
-                        text = "Shield Packs",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = colors.textPrimary,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    // Live price indicator
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Shield Packs",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = colors.textPrimary,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        if (uiState.priceSource != "fallback") {
+                            Text(
+                                text = if (uiState.priceSource == "live") "\u2022 Live prices" else "\u2022 Cached prices",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (uiState.priceSource == "live") colors.success else colors.textTertiary,
+                                fontSize = 9.sp,
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
@@ -221,7 +216,6 @@ fun ShieldShopScreen(
                     uiState.packs.forEach { pack ->
                         ShieldPackCard(
                             pack = pack,
-                            currency = uiState.selectedCurrency,
                             enabled = !uiState.purchasing && !atMax,
                             purchasing = uiState.purchasing,
                             onBuy = { viewModel.purchaseShield(walletSender, pack) },
@@ -249,13 +243,12 @@ fun ShieldShopScreen(
 @Composable
 private fun ShieldPackCard(
     pack: ShieldPack,
-    currency: String,
     enabled: Boolean,
     purchasing: Boolean,
     onBuy: () -> Unit,
 ) {
     val colors = SeekerBurnTheme.colors
-    val isSkr = currency == "SKR"
+    val skrAmount = pack.priceSkrBaseUnits.toLongOrNull()?.let { it / 1_000_000_000.0 } ?: 0.0
 
     BurnCard {
         Row(
@@ -287,51 +280,25 @@ private fun ShieldPackCard(
             }
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "${pack.shields} Shield${if (pack.shields > 1) "s" else ""}",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colors.textPrimary,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    if (isSkr) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = colors.success.copy(alpha = 0.2f),
-                        ) {
-                            Text(
-                                text = "10% OFF",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = colors.success,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                            )
-                        }
-                    }
-                }
+                Text(
+                    text = "${pack.shields} Shield${if (pack.shields > 1) "s" else ""}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.Bold,
+                )
                 Spacer(modifier = Modifier.height(2.dp))
-                if (isSkr) {
-                    val skrAmount = pack.priceSkrBaseUnits.toLongOrNull()?.let { it / 1_000_000_000.0 } ?: 0.0
-                    Text(
-                        text = "~${String.format("%.1f", skrAmount)} SKR (~$${"%.2f".format(pack.priceSkrUsd)})",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.primary,
-                    )
-                } else {
-                    Text(
-                        text = "~$${String.format("%.0f", pack.priceUsd)} in SOL",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.textSecondary,
-                    )
-                }
+                Text(
+                    text = "~${String.format("%.1f", skrAmount)} SKR (~\$${String.format("%.0f", pack.priceUsd)})",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.accent,
+                )
             }
             Button(
                 onClick = onBuy,
                 enabled = enabled,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isSkr) colors.accent else colors.primary,
+                    containerColor = colors.accent,
                     disabledContainerColor = colors.surfaceElevated2,
                 ),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -351,59 +318,6 @@ private fun ShieldPackCard(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun CurrencyToggle(
-    selected: String,
-    onToggle: () -> Unit,
-) {
-    val colors = SeekerBurnTheme.colors
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "Pay with:",
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.textSecondary,
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        OutlinedButton(
-            onClick = { if (selected != "SOL") onToggle() },
-            shape = RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp),
-            colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = if (selected == "SOL") colors.primary.copy(alpha = 0.15f) else colors.surface,
-            ),
-            border = BorderStroke(1.dp, if (selected == "SOL") colors.primary else colors.surfaceElevated2),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-        ) {
-            Text(
-                text = "SOL",
-                fontFamily = PressStart2P,
-                fontSize = 9.sp,
-                color = if (selected == "SOL") colors.primary else colors.textTertiary,
-            )
-        }
-        OutlinedButton(
-            onClick = { if (selected != "SKR") onToggle() },
-            shape = RoundedCornerShape(topEnd = 10.dp, bottomEnd = 10.dp),
-            colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = if (selected == "SKR") colors.accent.copy(alpha = 0.15f) else colors.surface,
-            ),
-            border = BorderStroke(1.dp, if (selected == "SKR") colors.accent else colors.surfaceElevated2),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-        ) {
-            Text(
-                text = "SEEKER",
-                fontFamily = PressStart2P,
-                fontSize = 9.sp,
-                color = if (selected == "SKR") colors.accent else colors.textTertiary,
-            )
         }
     }
 }

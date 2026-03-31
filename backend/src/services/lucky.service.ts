@@ -25,11 +25,18 @@
 
 import { eq, and, sql, gt, or, isNull, gte } from 'drizzle-orm';
 import { type DB, db } from '../db/client.js';
-import { luckyDrops, activeBuffs, userInventory, users } from '../db/schema.js';
+import { luckyDrops, activeBuffs, userInventory, users, dailyChallengeProgress } from '../db/schema.js';
 import { grantXp } from './xp.service.js';
 import { MAX_SHIELDS } from './shop.service.js';
+import { getDailyChallengesForDate } from './challenges.service.js';
 
-// ── Drop chance by streak ───────────────────────────────────
+// ── Lucky drop eligibility ───────────────────────────────────
+
+/** Minimum SKR (UI units) per burn to be eligible for a lucky drop. */
+export const MIN_LUCKY_BURN_SKR = 3;
+
+/** Maximum XP multiplier from buff stacking. */
+export const MAX_XP_MULTIPLIER = 3;
 
 const DROP_CHANCE_TIERS = [
   { minStreak: 100, chance: 0.25 },
@@ -156,9 +163,9 @@ export const LUCKY_ITEMS: LuckyItem[] = [
   {
     id: 'challenge_skip',
     name: 'Challenge Pass',
-    description: 'Instantly completes an active Daily Challenge.',
+    description: 'Auto-completes a daily challenge!',
     rarity: 'RARE', emoji: '🎫',
-    effect: 'CHALLENGE_SKIP', effectValue: 1, instant: false,
+    effect: 'CHALLENGE_SKIP', effectValue: 1, instant: true,
   },
 
   // ── EPIC (10%) ──
@@ -265,8 +272,15 @@ export async function rollLuckyDrop(
   userId: string,
   burnId: string,
   streak: number,
+  burnAmountSkr: number,
+  walletAddress: string,
+  burnDate: string,
   txn: DB,
 ): Promise<LuckyDropResult> {
+  // Must burn at least MIN_LUCKY_BURN_SKR to be eligible for drops
+  if (burnAmountSkr < MIN_LUCKY_BURN_SKR) {
+    return { dropped: false };
+  }
   // Check for active LOOT_LUCK buff (increases drop chance)
   let dropChance = getDropChance(streak);
   const luckBuff = await txn
@@ -276,7 +290,7 @@ export async function rollLuckyDrop(
       eq(activeBuffs.userId, userId),
       eq(activeBuffs.buffType, 'LOOT_LUCK'),
       gt(activeBuffs.remainingUses, 0),
-      or(isNull(activeBuffs.expiresAt), gte(activeBuffs.expiresAt, new Date())),
+      or(isNull(activeBuffs.expiresAt), gte(activeBuffs.expiresAt, sql`NOW()`)),
     ))
     .orderBy(sql`${activeBuffs.createdAt} ASC`)
     .limit(1);
@@ -374,6 +388,53 @@ export async function rollLuckyDrop(
         break;
       }
 
+      case 'CHALLENGE_SKIP': {
+        // Auto-complete the first uncompleted daily challenge
+        const dailyDefs = getDailyChallengesForDate(walletAddress, burnDate);
+        let skipDone = false;
+        for (const def of dailyDefs) {
+          const [prog] = await txn
+            .select()
+            .from(dailyChallengeProgress)
+            .where(and(
+              eq(dailyChallengeProgress.userId, userId),
+              eq(dailyChallengeProgress.challengeDate, burnDate),
+              eq(dailyChallengeProgress.challengeId, def.id),
+            ))
+            .limit(1);
+          if (!prog || !prog.completed) {
+            const target = def.evaluate({
+              userId, walletAddress, burnAmount: 0, dailyBurnCount: 0,
+              dailyVolume: 0, burnHourUTC: 0, currentStreak: 0,
+              weeklyBurnDays: 0, weeklyVolume: 0, lifetimeBurned: 0,
+              goldenBurnVolumeDelta: 0, goldenBurnCountDelta: 0,
+            }).target;
+            if (prog) {
+              await txn.update(dailyChallengeProgress).set({
+                completed: true, progressValue: target.toString(),
+                xpAwarded: def.xpReward, completedAt: new Date(),
+              }).where(eq(dailyChallengeProgress.id, prog.id));
+            } else {
+              await txn.insert(dailyChallengeProgress).values({
+                userId, challengeDate: burnDate, challengeId: def.id,
+                completed: true, progressValue: target.toString(),
+                xpAwarded: def.xpReward, completedAt: new Date(),
+              });
+            }
+            xpAwarded = def.xpReward;
+            await grantXp({ userId, amount: def.xpReward, reason: 'CHALLENGE_SKIP', refId: def.id }, txn);
+            skipDone = true;
+            break;
+          }
+        }
+        if (!skipDone) {
+          // All daily challenges already complete — grant consolation XP
+          xpAwarded = 250;
+          await grantXp({ userId, amount: 250, reason: 'CHALLENGE_SKIP', refId: burnId }, txn);
+        }
+        break;
+      }
+
       default:
         break;
     }
@@ -414,7 +475,7 @@ export async function consumeXpBoost(userId: string, txn: DB): Promise<number> {
       eq(activeBuffs.userId, userId),
       eq(activeBuffs.buffType, 'XP_BOOST'),
       gt(activeBuffs.remainingUses, 0),
-      or(isNull(activeBuffs.expiresAt), gte(activeBuffs.expiresAt, new Date())),
+      or(isNull(activeBuffs.expiresAt), gte(activeBuffs.expiresAt, sql`NOW()`)),
     ))
     .orderBy(sql`${activeBuffs.createdAt} ASC`)
     .limit(1);
@@ -423,13 +484,16 @@ export async function consumeXpBoost(userId: string, txn: DB): Promise<number> {
 
   const multiplier = (buff[0].metadata as { multiplier?: number })?.multiplier ?? 1.0;
 
-  // Decrement uses
-  await txn
-    .update(activeBuffs)
-    .set({ remainingUses: sql`${activeBuffs.remainingUses} - 1` })
-    .where(eq(activeBuffs.id, buff[0].id));
+  // Only decrement uses for count-based buffs; time-based buffs expire via expiresAt
+  if (!buff[0].expiresAt) {
+    await txn
+      .update(activeBuffs)
+      .set({ remainingUses: sql`${activeBuffs.remainingUses} - 1` })
+      .where(eq(activeBuffs.id, buff[0].id));
+  }
 
-  return multiplier;
+  // Cap the multiplier to prevent stacking abuse
+  return Math.min(multiplier, MAX_XP_MULTIPLIER);
 }
 
 /**
@@ -444,7 +508,7 @@ export async function consumeGoldenBurn(userId: string, txn: DB): Promise<number
       eq(activeBuffs.userId, userId),
       eq(activeBuffs.buffType, 'GOLDEN_BURN'),
       gt(activeBuffs.remainingUses, 0),
-      or(isNull(activeBuffs.expiresAt), gte(activeBuffs.expiresAt, new Date())),
+      or(isNull(activeBuffs.expiresAt), gte(activeBuffs.expiresAt, sql`NOW()`)),
     ))
     .orderBy(sql`${activeBuffs.createdAt} ASC`)
     .limit(1);

@@ -7,6 +7,7 @@ import club.seekerburn.app.data.api.SeekerBurnApi
 import club.seekerburn.app.data.local.SessionStore
 import club.seekerburn.app.data.solana.SolanaService
 import club.seekerburn.app.data.solana.WalletAdapterService
+import club.seekerburn.app.model.ChallengeProgress
 import com.solana.mobilewalletadapter.clientlib.ActivityResultSender
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
@@ -159,7 +160,6 @@ class HomeViewModel @Inject constructor(
                 signature = signature,
                 burnAmount = burnDec.toPlainString(),
                 feeAmount = feeDec.toPlainString(),
-                clientTimestamp = System.currentTimeMillis().toString(),
             )
         )
     }
@@ -220,16 +220,18 @@ class HomeViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Parallel fetch: profile + SKR balance + SOL balance
+                // Parallel fetch: profile + SKR balance + SOL balance + challenges
                 val profileDeferred = async { try { api.getProfile() } catch (_: Exception) { null } }
                 val skrBalanceDeferred = async { runCatching { solanaService.fetchSkrBalance(walletAddress) } }
                 val solBalanceDeferred = async { try { solanaService.fetchSolBalance(walletAddress) } catch (_: Exception) { 0L } }
+                val challengesDeferred = async { try { api.getChallenges() } catch (_: Exception) { null } }
 
                 val profile = profileDeferred.await()
                 val skrBalanceResult = skrBalanceDeferred.await()
                 val skrBalance = skrBalanceResult.getOrDefault(0.0)
                 val skrBalanceError = skrBalanceResult.exceptionOrNull()?.message
                 val solBalance = solBalanceDeferred.await()
+                val challenges = challengesDeferred.await()
 
                 _uiState.update { state ->
                     val currentBurnAmount = state.burnAmount
@@ -276,6 +278,9 @@ class HomeViewModel @Inject constructor(
                         // Clear one-shot burn feedback banners on profile refresh
                         lastXpGain = 0,
                         lastLevelUp = false,
+                        dailyChallenges = challenges?.dailyChallenges ?: emptyList(),
+                        weeklyChallenges = challenges?.weeklyChallenges ?: emptyList(),
+                        dailySweep = challenges?.dailySweep ?: false,
                     )
                 }
             } catch (e: Exception) {
@@ -344,6 +349,9 @@ data class HomeUiState(
     val isStreakAtRisk: Boolean = false,
     val lastXpGain: Int = 0,
     val lastLevelUp: Boolean = false,
+    val dailyChallenges: List<ChallengeProgress> = emptyList(),
+    val weeklyChallenges: List<ChallengeProgress> = emptyList(),
+    val dailySweep: Boolean = false,
 ) {
     /** 1% of burn amount — computed so it always matches the actual on-chain fee. */
     val feeAmount: Double get() = burnAmount * SeekerBurnConfig.PLATFORM_FEE_PERCENT / 100.0

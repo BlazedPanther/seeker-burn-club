@@ -42,6 +42,7 @@ class SessionStore @Inject constructor(
 
     // Non-sensitive UI preferences stay in DataStore
     private val KEY_ONBOARDING_COMPLETE = stringPreferencesKey("onboarding_complete")
+    private val KEY_TERMS_ACCEPTED = stringPreferencesKey("terms_accepted")
 
     // Use MutableStateFlow for truly reactive session state (not dependent on DataStore trigger hack)
     private val _sessionVersion = MutableStateFlow(0L)
@@ -54,6 +55,9 @@ class SessionStore @Inject constructor(
     }
     val isOnboardingComplete: Flow<Boolean> = context.dataStore.data.map {
         it[KEY_ONBOARDING_COMPLETE] == "true"
+    }
+    val isTermsAccepted: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_TERMS_ACCEPTED] == "true"
     }
 
     fun getAuthToken(): String? = encryptedPrefs.getString("auth_token", null)
@@ -103,6 +107,10 @@ class SessionStore @Inject constructor(
 
     suspend fun completeOnboarding() {
         context.dataStore.edit { it[KEY_ONBOARDING_COMPLETE] = "true" }
+    }
+
+    suspend fun acceptTerms() {
+        context.dataStore.edit { it[KEY_TERMS_ACCEPTED] = "true" }
     }
 
     suspend fun clearSession() {

@@ -70,7 +70,6 @@ data class BurnSubmitRequest(
     val signature: String,
     val burnAmount: String,
     val feeAmount: String,
-    val clientTimestamp: String,
 )
 
 @Serializable
@@ -447,6 +446,7 @@ data class ChallengeProgress(
     val title: String,
     val description: String = "",
     val xpReward: Int = 0,
+    val shieldReward: Int = 0,
     val progress: Float = 0f,
     val target: Float = 1f,
     val completed: Boolean = false,
@@ -477,8 +477,6 @@ data class ShieldPack(
     val id: String,
     val shields: Int,
     val priceUsd: Double,
-    val priceLamports: Long,
-    val priceSkrUsd: Double = 0.0,
     val priceSkrBaseUnits: String = "0",
 )
 
@@ -493,7 +491,6 @@ data class ShieldShopResponse(
     val packs: List<ShieldPack>,
     val maxShields: Int = 10,
     val priceSource: String = "fallback",
-    val solUsd: Double = 0.0,
     val skrUsd: Double = 0.0,
     val priceQuote: PriceQuote? = null,
 )
@@ -502,7 +499,6 @@ data class ShieldShopResponse(
 data class ShieldPurchaseRequest(
     val signature: String,
     val packId: String,
-    val currency: String = "SOL",
     val priceQuote: PriceQuote? = null,
 )
 

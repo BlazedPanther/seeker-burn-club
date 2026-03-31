@@ -398,7 +398,7 @@ export async function verifyAndRecordBurn(
       userId: lockedUser.id,
       walletAddress,
       burnAmount: thisBurnAmount * challengeMultiplier,
-      dailyBurnCount: dailyBurnCount + (challengeMultiplier - 1),
+      dailyBurnCount,
       dailyVolume: dailyVolume + thisBurnAmount * (challengeMultiplier - 1),
       burnHourUTC,
       currentStreak: newStreak,
@@ -406,13 +406,13 @@ export async function verifyAndRecordBurn(
       weeklyVolume: 0,
       lifetimeBurned: newLifetimeBurnedNum,
       goldenBurnVolumeDelta: thisBurnAmount * (challengeMultiplier - 1),
-      goldenBurnCountDelta: challengeMultiplier - 1,
+      goldenBurnCountDelta: 0,
     };
     const challengeResults = await evaluateChallenges(burnCtx, burnDate, dbTx);
     totalXpThisBurn += challengeResults.totalChallengeXp;
 
-    // ── Lucky Burns: roll for a drop ──
-    const luckyDrop = await rollLuckyDrop(lockedUser.id, record!.id, newStreak, dbTx);
+    // ── Lucky Burns: roll for a drop (requires minimum burn) ──
+    const luckyDrop = await rollLuckyDrop(lockedUser.id, record!.id, newStreak, thisBurnAmount, walletAddress, burnDate, dbTx);
     if (luckyDrop.xpAwarded) totalXpThisBurn += luckyDrop.xpAwarded;
 
     await dbTx
@@ -447,7 +447,7 @@ export async function verifyAndRecordBurn(
       finalXp: Number(finalUser.xp),
       finalLevel: finalUser.level,
       leveledUp: finalUser.level > lockedUser.level,
-      shieldsAwarded: finalUser.streakShields - lockedUser.streakShields,
+      shieldsAwarded: finalUser.streakShields - lockedUser.streakShields + shieldsConsumedInBurn,
       challengeResults,
       luckyDrop,
     };

@@ -15,6 +15,7 @@ import {
   dailyChallengeProgress, weeklyChallengeProgress, xpLedger,
 } from '../db/schema.js';
 import { grantXp, DAILY_SWEEP_BONUS_XP } from './xp.service.js';
+import { MAX_SHIELDS } from './shop.service.js';
 
 // ── Daily Challenge Definitions ──────────────────────────────
 
@@ -23,6 +24,7 @@ export interface ChallengeDefinition {
   title: string;
   description: string;
   xpReward: number;
+  shieldReward?: number;
   /** Evaluate the challenge given the burn context. Returns progress value (>= target = completed). */
   evaluate: (ctx: BurnContext) => { progress: number; target: number };
 }
@@ -107,6 +109,7 @@ const WEEKLY_TEMPLATES: ChallengeDefinition[] = [
     title: '7-DAY INFERNO',
     description: 'Burn every day this week',
     xpReward: 1000,
+    shieldReward: 1,
     evaluate: (ctx) => ({ progress: ctx.weeklyBurnDays, target: 7 }),
   },
   {
@@ -121,7 +124,7 @@ const WEEKLY_TEMPLATES: ChallengeDefinition[] = [
     title: 'GRIND LORD',
     description: 'Complete 20+ burns this week',
     xpReward: 1500,
-    evaluate: (ctx) => ({ progress: ctx.dailyBurnCount, target: 20 }), // will be aggregated weekly
+    evaluate: () => ({ progress: 0, target: 20 }), // evaluated via weekly aggregate, see evaluateChallenges
   },
   {
     id: 'consistency',
@@ -135,6 +138,7 @@ const WEEKLY_TEMPLATES: ChallengeDefinition[] = [
     title: 'HEATWAVE',
     description: 'Burn 500+ SKR this week',
     xpReward: 2000,
+    shieldReward: 1,
     evaluate: (ctx) => ({ progress: ctx.weeklyVolume, target: 500 }),
   },
 ];
@@ -201,10 +205,12 @@ export interface ChallengeResult {
     completed: boolean;
     justCompleted: boolean;
     xpAwarded: number;
+    shieldAwarded: number;
   }>;
   dailySweep: boolean;
   dailySweepXp: number;
   totalChallengeXp: number;
+  totalShieldsAwarded: number;
 }
 
 /**
@@ -221,6 +227,7 @@ export async function evaluateChallenges(
   const weeklyDefs = getWeeklyChallengesForWeek(ctx.walletAddress, weekStart);
 
   let totalChallengeXp = 0;
+  let totalShieldsAwarded = 0;
 
   // ── Daily challenges ──
 
@@ -383,6 +390,18 @@ export async function evaluateChallenges(
       xpAwarded = def.xpReward;
       await grantXp({ userId: ctx.userId, amount: def.xpReward, reason: 'WEEKLY_CHALLENGE', refId: def.id }, txn);
       totalChallengeXp += def.xpReward;
+
+      // Grant shield reward if applicable
+      if (def.shieldReward && def.shieldReward > 0) {
+        await txn
+          .update(users)
+          .set({
+            streakShields: sql`LEAST(${users.streakShields} + ${def.shieldReward}, ${MAX_SHIELDS})`,
+            streakShieldActive: true,
+          })
+          .where(eq(users.id, ctx.userId));
+        totalShieldsAwarded += def.shieldReward;
+      }
     }
 
     weeklyResults.push({
@@ -393,6 +412,7 @@ export async function evaluateChallenges(
       completed,
       justCompleted,
       xpAwarded,
+      shieldAwarded: justCompleted && def.shieldReward ? def.shieldReward : 0,
     });
   }
 
@@ -402,6 +422,7 @@ export async function evaluateChallenges(
     dailySweep,
     dailySweepXp,
     totalChallengeXp,
+    totalShieldsAwarded,
   };
 }
 
@@ -468,6 +489,7 @@ export async function getChallengeState(
       title: def.title,
       description: def.description,
       xpReward: def.xpReward,
+      shieldReward: def.shieldReward ?? 0,
       progress: parseFloat(p?.progressValue ?? '0'),
       target: evalResult.target,
       completed: p?.completed ?? false,

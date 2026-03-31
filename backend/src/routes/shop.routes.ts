@@ -1,11 +1,11 @@
 /**
- * Shield Shop routes — purchase streak shields with SOL.
+ * Shield Shop routes — purchase streak shields with SKR.
  */
 import { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { users } from '../db/schema.js';
-import { getShieldPacks, verifyShieldPurchase, generatePriceQuote, MAX_SHIELDS, type ShopCurrency, type PriceQuote } from '../services/shop.service.js';
+import { getShieldPacks, verifyShieldPurchase, generatePriceQuote, MAX_SHIELDS, type PriceQuote } from '../services/shop.service.js';
 
 export async function shopRoutes(fastify: FastifyInstance) {
   // GET /api/v1/shop/shields — available shield packs + prices (public)
@@ -16,22 +16,20 @@ export async function shopRoutes(fastify: FastifyInstance) {
       packs,
       maxShields: MAX_SHIELDS,
       priceSource: prices.source,
-      solUsd: prices.solUsd,
       skrUsd: prices.skrUsd,
       priceQuote: quote,
     });
   });
 
-  // POST /api/v1/shop/shields/purchase — verify SOL transfer + credit shields
+  // POST /api/v1/shop/shields/purchase — verify SKR transfer + credit shields
   fastify.post('/api/v1/shop/shields/purchase', {
     preHandler: [fastify.authenticate],
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
   }, async (request, reply) => {
     const wallet = request.user.sub;
-    const { signature, packId, currency, priceQuote } = request.body as {
+    const { signature, packId, priceQuote } = request.body as {
       signature: string;
       packId: string;
-      currency?: ShopCurrency;
       priceQuote?: PriceQuote;
     };
 
@@ -39,10 +37,8 @@ export async function shopRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'MISSING_FIELDS' });
     }
 
-    const validCurrency: ShopCurrency = currency === 'SKR' ? 'SKR' : 'SOL';
-
     try {
-      const result = await verifyShieldPurchase(wallet, signature, packId, validCurrency, priceQuote);
+      const result = await verifyShieldPurchase(wallet, signature, packId, priceQuote);
       return reply.code(200).send(result);
     } catch (err: unknown) {
       const message = (err as Error).message;

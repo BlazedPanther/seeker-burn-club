@@ -124,7 +124,7 @@ fun InventoryScreen(
                                         color = colors.textSecondary,
                                     )
                                     Text(
-                                        text = "Burn SKR to get Lucky Drops!",
+                                        text = "Burn \u22653 SKR to get Lucky Drops!",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = colors.textTertiary,
                                         textAlign = TextAlign.Center,

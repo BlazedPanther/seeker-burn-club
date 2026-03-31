@@ -205,6 +205,23 @@ fun TransactionSuccessScreen(
         }
 
         // Lucky Drop section
+        val burnAmountNum = burnAmount.toDoubleOrNull() ?: 0.0
+        if (luckyDropName == null && burnAmountNum < 3.0) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BurnIcon(icon = BurnIcons.StarGlow, contentDescription = null, size = 14.dp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Burn \u22653 SKR for a Lucky Drop chance",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textTertiary,
+                )
+            }
+        }
         if (luckyDropName != null) {
             Spacer(modifier = Modifier.height(16.dp))
 

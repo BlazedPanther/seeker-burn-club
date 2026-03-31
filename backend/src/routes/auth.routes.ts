@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import crypto from 'node:crypto';
+import { PublicKey } from '@solana/web3.js';
 import { db } from '../db/client.js';
 import { authSessions } from '../db/schema.js';
 import { generateChallenge, verifyAuth, revokeSession } from '../services/auth.service.js';
@@ -8,10 +9,16 @@ import { parseExpiresIn } from '../lib/time.js';
 import { redis } from '../lib/redis.js';
 import { env } from '../config/env.js';
 
-const challengeSchema = z.object({ walletAddress: z.string().min(32).max(44) });
+const isValidSolanaAddress = (addr: string) => {
+  try { new PublicKey(addr); return true; } catch { return false; }
+};
+
+const challengeSchema = z.object({
+  walletAddress: z.string().min(32).max(44).refine(isValidSolanaAddress, 'Invalid Solana address'),
+});
 
 const verifySchema = z.object({
-  walletAddress: z.string().min(32).max(44),
+  walletAddress: z.string().min(32).max(44).refine(isValidSolanaAddress, 'Invalid Solana address'),
   signature: z.string().min(64),
   nonce: z.string().min(16),
   deviceFingerprint: z.string().min(1).max(255),

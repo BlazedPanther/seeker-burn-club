@@ -46,6 +46,8 @@ object Routes {
     const val CHALLENGES = "challenges"
     const val SHIELD_SHOP = "shield_shop"
     const val INVENTORY = "inventory"
+    const val TERMS = "terms"
+    const val HOW_IT_WORKS = "how_it_works"
 
     fun txPending(sig: String, burnAmount: String? = null, feeAmount: String? = null): String {
         val base = "tx_pending/$sig"
@@ -114,6 +116,10 @@ fun SeekerBurnNavHost(
         authViewModel.isOnboardingComplete.map<Boolean, Boolean?> { it }
     }.collectAsState(initial = null)
 
+    val termsState by remember {
+        authViewModel.isTermsAccepted.map<Boolean, Boolean?> { it }
+    }.collectAsState(initial = null)
+
     // ── Cinematic intro (plays once per cold start) ──────────────────────
     var introFinished by remember { mutableStateOf(false) }
 
@@ -122,7 +128,7 @@ fun SeekerBurnNavHost(
         return
     }
 
-    if (onboardingState == null) {
+    if (onboardingState == null || termsState == null) {
         // DataStore hasn't loaded yet — show blank themed screen (splash)
         Box(
             modifier = Modifier
@@ -132,12 +138,27 @@ fun SeekerBurnNavHost(
         return
     }
 
-    val startDest = if (onboardingState == true) Routes.main() else Routes.ONBOARDING
+    val startDest = when {
+        termsState != true -> Routes.TERMS
+        onboardingState != true -> Routes.ONBOARDING
+        else -> Routes.main()
+    }
 
     NavHost(
         navController = navController,
         startDestination = startDest,
     ) {
+        composable(Routes.TERMS) {
+            TermsScreen(
+                onAccept = {
+                    authViewModel.acceptTerms()
+                    navController.navigate(Routes.ONBOARDING) {
+                        popUpTo(Routes.TERMS) { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable(Routes.ONBOARDING) {
             OnboardingScreen(
                 onComplete = {
@@ -172,6 +193,7 @@ fun SeekerBurnNavHost(
                 onNavigateToChallenges = { navController.navigate(Routes.CHALLENGES) },
                 onNavigateToShop = { navController.navigate(Routes.SHIELD_SHOP) },
                 onNavigateToInventory = { navController.navigate(Routes.INVENTORY) },
+                onNavigateToHowItWorks = { navController.navigate(Routes.HOW_IT_WORKS) },
                 initialTab = initialTab,
             )
         }
@@ -449,6 +471,12 @@ fun SeekerBurnNavHost(
 
         composable(Routes.INVENTORY) {
             InventoryScreen(
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Routes.HOW_IT_WORKS) {
+            HowItWorksScreen(
                 onBack = { navController.popBackStack() },
             )
         }

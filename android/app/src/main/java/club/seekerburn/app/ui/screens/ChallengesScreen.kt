@@ -283,13 +283,27 @@ private fun ChallengeCard(challenge: ChallengeProgress) {
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
                     )
-                    Text(
-                        text = "+${challenge.xpReward} XP",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (challenge.completed) colors.success else colors.accent,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 9.sp,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = "+${challenge.xpReward} XP",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (challenge.completed) colors.success else colors.accent,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 9.sp,
+                        )
+                        if (challenge.shieldReward > 0) {
+                            Text(
+                                text = "+${challenge.shieldReward} \uD83D\uDEE1\uFE0F",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (challenge.completed) colors.success else colors.success,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp,
+                            )
+                        }
+                    }
                 }
                 if (challenge.description.isNotBlank()) {
                     Spacer(modifier = Modifier.height(2.dp))
