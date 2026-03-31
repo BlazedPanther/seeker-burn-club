@@ -215,8 +215,8 @@ fun TransactionSuccessScreen(
             ) {
                 BurnIcon(icon = BurnIcons.StarGlow, contentDescription = null, size = 14.dp)
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Burn \u22653 SKR for a Lucky Drop chance",
+                    Text(
+                        text = "Burn ≥3 SKR per burn for a Lucky Drop chance (no daily cap)",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.textTertiary,
                 )
