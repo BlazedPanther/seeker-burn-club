@@ -137,7 +137,7 @@ export async function badgeAssetRoutes(fastify: FastifyInstance) {
       const { gif } = generateCreatureGif(seed, badgeId, { transparent: wantTransparent });
 
       // Store in Redis (fire-and-forget; TTL 30 days)
-      try { await redis.setex(cacheKey, 60 * 60 * 24 * 365, gif as unknown as string); } catch { /* Redis down */ }
+      try { await redis.setex(cacheKey, 60 * 60 * 24 * 365, Buffer.from(gif)); } catch { /* Redis down */ }
 
       reply.header('Content-Type', 'image/gif');
       reply.header('Cache-Control', 'public, max-age=31536000, immutable');
@@ -173,7 +173,7 @@ export async function badgeAssetRoutes(fastify: FastifyInstance) {
       const seed = creatureSeed(wallet, badgeId, access.seedSalt);
       const { png } = generateCreaturePng(seed, badgeId);
 
-      try { await redis.setex(cacheKey, 60 * 60 * 24 * 365, png as unknown as string); } catch { /* Redis down */ }
+      try { await redis.setex(cacheKey, 60 * 60 * 24 * 365, Buffer.from(png)); } catch { /* Redis down */ }
 
       reply.header('Content-Type', 'image/png');
       reply.header('Cache-Control', 'public, max-age=31536000, immutable');
@@ -440,8 +440,8 @@ export async function badgesRoutes(fastify: FastifyInstance) {
               import('../lib/creature.js').then(m => m.generateCreaturePng(seed, badgeId)),
             ]);
             await Promise.all([
-              redis.setex(`creature:gif:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, gif as unknown as string),
-              redis.setex(`creature:png:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, png as unknown as string),
+              redis.setex(`creature:gif:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, Buffer.from(gif)),
+              redis.setex(`creature:png:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, Buffer.from(png)),
             ]);
           } catch { /* non-fatal */ }
         })();
@@ -511,8 +511,8 @@ export async function badgesRoutes(fastify: FastifyInstance) {
                 import('../lib/creature.js').then(m => m.generateCreaturePng(seed, badgeId)),
               ]);
               await Promise.all([
-                redis.setex(`creature:gif:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, gif as unknown as string),
-                redis.setex(`creature:png:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, png as unknown as string),
+                redis.setex(`creature:gif:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, Buffer.from(gif)),
+                redis.setex(`creature:png:${wallet}:${badgeId}`, 60 * 60 * 24 * 365, Buffer.from(png)),
               ]);
             } catch { /* non-fatal */ }
           })();

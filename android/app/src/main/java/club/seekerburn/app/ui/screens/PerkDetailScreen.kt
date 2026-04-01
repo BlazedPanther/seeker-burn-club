@@ -212,7 +212,7 @@ fun PerkDetailScreen(
                         PerkState.AVAILABLE -> {
                             BurnButton(
                                 text = if (perkState.isClaiming) "Claiming…" else "Claim Perk",
-                                onClick = { perkViewModel.claimPerk("") },
+                                onClick = { perkViewModel.claimPerk() },
                                 enabled = !perkState.isClaiming,
                             )
                         }

@@ -29,6 +29,7 @@ import club.seekerburn.app.ui.theme.PressStart2P
 import club.seekerburn.app.ui.theme.Silkscreen
 import club.seekerburn.app.ui.theme.SeekerBurnTheme
 import kotlinx.coroutines.*
+import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.math.*
 import kotlin.random.Random
@@ -114,7 +115,10 @@ fun IntroScreen(
             launch(Dispatchers.IO) {
                 try {
                     val url = "${SeekerBurnConfig.BACKEND_URL}/api/v1/creatures/image/${entry.seed}/${entry.badgeId}.gif?transparent=1"
-                    val bytes = URL(url).readBytes()
+                    val conn = URL(url).openConnection() as HttpURLConnection
+                    conn.connectTimeout = 10_000
+                    conn.readTimeout = 10_000
+                    val bytes = conn.inputStream.use { it.readBytes() }
                     @Suppress("DEPRECATION")
                     val movie = Movie.decodeByteArray(bytes, 0, bytes.size)
                     creatureGifs[idx] = CreatureGif(movie, bytes)

@@ -24,6 +24,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { db, type DB } from '../db/client.js';
 import { users, xpLedger } from '../db/schema.js';
+import { MAX_SHIELDS } from './shop.service.js';
 
 // ── XP Constants ────────────────────────────────────────────
 
@@ -237,7 +238,7 @@ export async function grantXp(
       .update(users)
       .set({
         level: newLevel,
-        streakShields: sql`${users.streakShields} + ${shieldsAwarded}`,
+        streakShields: sql`LEAST(${users.streakShields} + ${shieldsAwarded}, ${MAX_SHIELDS})`,
         ...(shieldsAwarded > 0 ? { streakShieldActive: true } : {}),
         updatedAt: new Date(),
       })

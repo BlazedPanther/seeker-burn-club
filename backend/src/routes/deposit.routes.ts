@@ -98,11 +98,15 @@ async function verifyDeposit(
   // Verify blockTime present
   if (!tx.blockTime) throw new Error('MISSING_BLOCK_TIME');
 
-  // Block time freshness check (same window as burns)
+  // Block time freshness check (same window as burns, one-directional)
   const now = Math.floor(Date.now() / 1000);
-  if (Math.abs(now - tx.blockTime) > env.TX_FRESHNESS_WINDOW) {
+  if (now - tx.blockTime > env.TX_FRESHNESS_WINDOW) {
     securityLog({ eventType: 'DEPOSIT_TX_TOO_OLD', walletAddress, severity: 'WARN', details: { signature, blockTime: tx.blockTime, serverTime: now } });
     throw new Error('TRANSACTION_TOO_OLD');
+  }
+  if (tx.blockTime - now > 60) {
+    securityLog({ eventType: 'DEPOSIT_TX_FUTURE', walletAddress, severity: 'WARN', details: { signature, blockTime: tx.blockTime, serverTime: now } });
+    throw new Error('TRANSACTION_FROM_FUTURE');
   }
 
   return {
@@ -182,7 +186,7 @@ export async function depositRoutes(fastify: FastifyInstance) {
             walletAddress: wallet,
             txSignature: body.signature,
             amount: result.amountStr,
-            slot: result.slot.toString(),
+            slot: result.slot,
             blockTime: new Date(result.blockTime * 1000),
             status: 'VERIFIED',
             verifiedAt: new Date(),

@@ -93,25 +93,34 @@ export async function resetBrokenStreaks(): Promise<number> {
  * Should run daily.
  */
 export async function cleanupExpired(): Promise<void> {
-  // Delete expired challenges (older than 1 day)
-  await db.execute(sql`
-    DELETE FROM auth_challenges
-    WHERE expires_at < NOW() - INTERVAL '1 day'
-  `);
+  await db.transaction(async (tx) => {
+    const lockResult = await tx.execute(sql`SELECT pg_try_advisory_xact_lock(1002) AS acquired`);
+    const acquired = (lockResult[0] as unknown as Record<string, unknown>)?.acquired;
+    if (!acquired) {
+      log.info('[Job] Cleanup skipped — another instance holds the lock');
+      return;
+    }
 
-  // Delete expired sessions (older than 90 days)
-  await db.execute(sql`
-    DELETE FROM auth_sessions
-    WHERE expires_at < NOW() - INTERVAL '90 days'
-  `);
+    // Delete expired challenges (older than 1 day)
+    await tx.execute(sql`
+      DELETE FROM auth_challenges
+      WHERE expires_at < NOW() - INTERVAL '1 day'
+    `);
 
-  // Delete old security logs (older than 1 year)
-  await db.execute(sql`
-    DELETE FROM security_logs
-    WHERE created_at < NOW() - INTERVAL '1 year'
-  `);
+    // Delete expired sessions (older than 90 days)
+    await tx.execute(sql`
+      DELETE FROM auth_sessions
+      WHERE expires_at < NOW() - INTERVAL '90 days'
+    `);
 
-  log.info('[Job] Cleaned up expired records');
+    // Delete old security logs (older than 1 year)
+    await tx.execute(sql`
+      DELETE FROM security_logs
+      WHERE created_at < NOW() - INTERVAL '1 year'
+    `);
+
+    log.info('[Job] Cleaned up expired records');
+  });
 }
 
 /**
@@ -119,15 +128,24 @@ export async function cleanupExpired(): Promise<void> {
  * Should run every 10 minutes.
  */
 export async function markStaleBurns(): Promise<void> {
-  await db.execute(sql`
-    UPDATE burns
-    SET status = 'FAILED',
-        verification_error = 'TIMEOUT_UNCONFIRMED'
-    WHERE status = 'PENDING'
-      AND submitted_at < NOW() - INTERVAL '10 minutes'
-  `);
+  await db.transaction(async (tx) => {
+    const lockResult = await tx.execute(sql`SELECT pg_try_advisory_xact_lock(1003) AS acquired`);
+    const acquired = (lockResult[0] as unknown as Record<string, unknown>)?.acquired;
+    if (!acquired) {
+      log.info('[Job] Stale burns check skipped — another instance holds the lock');
+      return;
+    }
 
-  log.info('[Job] Marked stale pending burns as FAILED');
+    await tx.execute(sql`
+      UPDATE burns
+      SET status = 'FAILED',
+          verification_error = 'TIMEOUT_UNCONFIRMED'
+      WHERE status = 'PENDING'
+        AND submitted_at < NOW() - INTERVAL '10 minutes'
+    `);
+
+    log.info('[Job] Marked stale pending burns as FAILED');
+  });
 }
 
 /**

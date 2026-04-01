@@ -2,6 +2,7 @@
  * Shield Shop routes — purchase streak shields with SKR.
  */
 import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { users } from '../db/schema.js';
@@ -21,21 +22,26 @@ export async function shopRoutes(fastify: FastifyInstance) {
     });
   });
 
+  const purchaseSchema = z.object({
+    signature: z.string().min(1),
+    packId: z.string().min(1),
+    priceQuote: z.object({
+      payload: z.string(),
+      signature: z.string(),
+    }).optional(),
+  });
+
   // POST /api/v1/shop/shields/purchase — verify SKR transfer + credit shields
   fastify.post('/api/v1/shop/shields/purchase', {
     preHandler: [fastify.authenticate],
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
   }, async (request, reply) => {
     const wallet = request.user.sub;
-    const { signature, packId, priceQuote } = request.body as {
-      signature: string;
-      packId: string;
-      priceQuote?: PriceQuote;
-    };
-
-    if (!signature || !packId) {
-      return reply.code(400).send({ error: 'MISSING_FIELDS' });
+    const parsed = purchaseSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_REQUEST', details: parsed.error.issues });
     }
+    const { signature, packId, priceQuote } = parsed.data;
 
     try {
       const result = await verifyShieldPurchase(wallet, signature, packId, priceQuote);

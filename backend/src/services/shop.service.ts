@@ -21,7 +21,7 @@
 import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { users, shieldPurchases } from '../db/schema.js';
-import { connection, getMintDecimals } from '../lib/solana.js';
+import { connection, getMintDecimals, TOKEN_PROGRAM_ID } from '../lib/solana.js';
 import { env } from '../config/env.js';
 import { securityLog } from '../lib/security.js';
 import { PublicKey } from '@solana/web3.js';
@@ -169,7 +169,6 @@ export async function verifyShieldPurchase(
     ?? (tx.transaction.message as unknown as { instructions: typeof tx.transaction.message.compiledInstructions }).instructions;
 
   // Verify SPL token transfer to treasury ATA
-  const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
   const treasuryAta = new PublicKey(env.TREASURY_SKR_ATA);
 
   for (const ix of instructions) {
@@ -177,11 +176,17 @@ export async function verifyShieldPurchase(
     if (!programId?.equals(TOKEN_PROGRAM_ID)) continue;
 
     const data = Buffer.from(ix.data);
-    // SPL Transfer instruction type = 3
-    if (data.length >= 9 && data[0] === 3) {
+    // SPL Transfer (3): [source, destination, authority]
+    // SPL TransferChecked (12): [source, mint, destination, authority]
+    if (data.length >= 9 && (data[0] === 3 || data[0] === 12)) {
+      const instructionType = data[0];
       const amount = data.readBigUInt64LE(1);
-      const dest = messageAccountKeys.get(ix.accountKeyIndexes[1]!);
-      const owner = messageAccountKeys.get(ix.accountKeyIndexes[2]!);
+      const dest = instructionType === 12
+        ? messageAccountKeys.get(ix.accountKeyIndexes[2]!)
+        : messageAccountKeys.get(ix.accountKeyIndexes[1]!);
+      const owner = instructionType === 12
+        ? messageAccountKeys.get(ix.accountKeyIndexes[3]!)
+        : messageAccountKeys.get(ix.accountKeyIndexes[2]!);
 
       if (dest?.equals(treasuryAta) && owner?.equals(walletKey)) {
         actualAmount = amount;

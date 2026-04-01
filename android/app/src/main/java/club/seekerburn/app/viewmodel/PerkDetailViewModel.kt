@@ -34,11 +34,11 @@ class PerkDetailViewModel @Inject constructor(
         loadPerk()
     }
 
-    fun claimPerk(proofSignature: String) {
+    fun claimPerk() {
         viewModelScope.launch {
             _uiState.update { it.copy(isClaiming = true, error = null) }
             try {
-                api.claimPerk(perkId, proofSignature)
+                api.claimPerk(perkId, "")
                 // Reload the perk to get updated state (userClaimed = true)
                 loadPerk()
             } catch (e: Exception) {

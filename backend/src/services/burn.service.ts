@@ -13,7 +13,7 @@ import { PublicKey } from '@solana/web3.js';
 import { env } from '../config/env.js';
 import { evaluateReferralQualification } from './referrals.service.js';
 import { grantBurnXp, grantBadgeXp, levelFromXp, getLevelTitle } from './xp.service.js';
-import { evaluateChallenges, type ChallengeResult, type BurnContext } from './challenges.service.js';
+import { evaluateChallenges, recheckDailySweep, type ChallengeResult, type BurnContext } from './challenges.service.js';
 import { rollLuckyDrop, consumeXpBoost, consumeGoldenBurn, type LuckyDropResult } from './lucky.service.js';
 
 export interface VerificationResult {
@@ -211,11 +211,15 @@ export async function verifyAndRecordBurn(
   const blockTime = tx.blockTime; // capture after null check for TypeScript
   const burnDate = getUTCDateString(blockTime);
 
-  // 6. Block time freshness (configurable window)
+  // 6. Block time freshness (configurable window, one-directional)
   const now = Math.floor(Date.now() / 1000);
-  if (Math.abs(now - blockTime) > env.TX_FRESHNESS_WINDOW) {
+  if (now - blockTime > env.TX_FRESHNESS_WINDOW) {
     securityLog({ eventType: 'BURN_TX_TOO_OLD', walletAddress, severity: 'WARN', details: { signature, blockTime, serverTime: now, window: env.TX_FRESHNESS_WINDOW } });
     throw new Error('TRANSACTION_TOO_OLD');
+  }
+  if (blockTime - now > 60) {
+    securityLog({ eventType: 'BURN_TX_FUTURE', walletAddress, severity: 'WARN', details: { signature, blockTime, serverTime: now } });
+    throw new Error('TRANSACTION_FROM_FUTURE');
   }
 
   // 7. Get or create user (race-safe upsert)
@@ -357,7 +361,7 @@ export async function verifyAndRecordBurn(
         feeAmount: feeAmountStr,
         burnDate,
         streakDay: newStreak,
-        slot: (tx.slot ?? 0).toString(),
+        slot: tx.slot ?? 0,
         blockTime: new Date(blockTime * 1000),
         status: 'VERIFIED',
         badgeEarnedId: newBadges[0]?.id ?? null,
@@ -416,6 +420,18 @@ export async function verifyAndRecordBurn(
     // ── Lucky Burns: roll for a drop (requires minimum burn) ──
     const luckyDrop = await rollLuckyDrop(lockedUser.id, record!.id, newStreak, thisBurnAmount, walletAddress, burnDate, dbTx);
     if (luckyDrop.xpAwarded) totalXpThisBurn += luckyDrop.xpAwarded;
+
+    // If lucky drop included a CHALLENGE_SKIP and sweep wasn't already awarded,
+    // re-check whether all 3 dailies are now complete for the sweep bonus.
+    if (luckyDrop.dropped && !challengeResults.dailySweep) {
+      const sweepRecheck = await recheckDailySweep(lockedUser.id, burnDate, dbTx);
+      if (sweepRecheck.dailySweepXp > 0) {
+        totalXpThisBurn += sweepRecheck.dailySweepXp;
+        challengeResults.dailySweep = true;
+        challengeResults.dailySweepXp = sweepRecheck.dailySweepXp;
+        challengeResults.totalChallengeXp += sweepRecheck.dailySweepXp;
+      }
+    }
 
     await dbTx
       .update(users)

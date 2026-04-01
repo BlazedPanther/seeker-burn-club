@@ -67,7 +67,10 @@ export async function authRoutes(fastify: FastifyInstance) {
       if (count > 10) {
         return reply.code(429).send({ error: 'RATE_LIMIT_EXCEEDED' });
       }
-    } catch { /* Redis down — allow */ }
+    } catch {
+      // Redis down — fail closed to prevent brute-force flooding
+      return reply.code(503).send({ error: 'SERVICE_UNAVAILABLE', message: 'Rate limiting unavailable. Please retry.' });
+    }
 
     let result;
     try {

@@ -398,7 +398,7 @@ async function migrate() {
   for (const tbl of ['users', 'burns', 'auth_sessions', 'security_logs']) {
     await sql.unsafe(
       `ALTER TABLE ${tbl} ALTER COLUMN device_fingerprint TYPE VARCHAR(255)`,
-    ).catch(() => { /* column may already be wider or table may not exist */ });
+    ).catch((e: Error) => { console.warn(`Migration: widen device_fingerprint on ${tbl}:`, e.message); });
   }
 
   console.log('Migrations complete.');

@@ -235,7 +235,10 @@ class HomeViewModel @Inject constructor(
 
                 _uiState.update { state ->
                     val currentBurnAmount = state.burnAmount
-                    val fee = currentBurnAmount * SeekerBurnConfig.PLATFORM_FEE_PERCENT / 100.0
+                    val fee = java.math.BigDecimal.valueOf(currentBurnAmount)
+                        .multiply(java.math.BigDecimal.valueOf(SeekerBurnConfig.PLATFORM_FEE_PERCENT))
+                        .divide(java.math.BigDecimal.valueOf(100.0), 9, java.math.RoundingMode.HALF_UP)
+                        .toDouble()
                     val totalRequired = currentBurnAmount + fee
                     state.copy(
                         isLoading = false,
@@ -354,7 +357,10 @@ data class HomeUiState(
     val dailySweep: Boolean = false,
 ) {
     /** 1% of burn amount — computed so it always matches the actual on-chain fee. */
-    val feeAmount: Double get() = burnAmount * SeekerBurnConfig.PLATFORM_FEE_PERCENT / 100.0
+    val feeAmount: Double get() = java.math.BigDecimal.valueOf(burnAmount)
+        .multiply(java.math.BigDecimal.valueOf(SeekerBurnConfig.PLATFORM_FEE_PERCENT))
+        .divide(java.math.BigDecimal.valueOf(100.0), 9, java.math.RoundingMode.HALF_UP)
+        .toDouble()
     val canBurn: Boolean get() = walletAddress.isNotBlank() && !isLoading && !insufficientBalance && !insufficientSol && burnAmount >= SeekerBurnConfig.MIN_BURN_SKR
 }
 

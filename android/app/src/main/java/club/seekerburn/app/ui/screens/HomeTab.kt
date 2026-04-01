@@ -55,6 +55,7 @@ import coil.decode.ImageDecoderDecoder
 import coil.request.ImageRequest
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 
 
@@ -95,12 +96,14 @@ fun HomeTab(
         }
     }
 
-    // Keep Home data fresh while app is open so weekly quests and achievements stay current.
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(60_000L)
-            viewModel.refresh()
-            globalStatsViewModel.refresh()
+    // Keep Home data fresh while app is visible (pauses when backgrounded).
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                delay(60_000L)
+                viewModel.refresh()
+                globalStatsViewModel.refresh()
+            }
         }
     }
 

@@ -52,9 +52,13 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("release.keystore")
-            storePassword = "REDACTED"
+            storePassword = providers.gradleProperty("RELEASE_STORE_PASSWORD").orNull
+                ?: System.getenv("RELEASE_STORE_PASSWORD")
+                ?: error("RELEASE_STORE_PASSWORD not set. Set it in ~/.gradle/gradle.properties or env.")
             keyAlias = "seekerburn"
-            keyPassword = "REDACTED"
+            keyPassword = providers.gradleProperty("RELEASE_KEY_PASSWORD").orNull
+                ?: System.getenv("RELEASE_KEY_PASSWORD")
+                ?: error("RELEASE_KEY_PASSWORD not set. Set it in ~/.gradle/gradle.properties or env.")
         }
     }
 
@@ -62,8 +66,8 @@ android {
         applicationId = "club.seekerburn.app"
         minSdk = 33
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -38,16 +38,18 @@ export interface CreatureAssetUrls {
 export async function uploadCreatureAssets(
   wallet: string,
   badgeId: string,
-  _seedSalt?: string,
+  seedSalt?: string,
 ): Promise<CreatureAssetUrls> {
   const def = getBadgeById(badgeId);
   if (!def) throw new Error(`Unknown badge: ${badgeId}`);
 
   const baseUrl = env.BACKEND_URL;
+  // Include seedSalt in URLs when present to prevent cache collisions on re-minted badges
+  const saltSuffix = seedSalt ? `?salt=${seedSalt}` : '';
   return {
-    imageUrl: `${baseUrl}/api/v1/creatures/image/${wallet}/${badgeId}.gif`,
-    pngUrl: `${baseUrl}/api/v1/creatures/image/${wallet}/${badgeId}.png`,
-    metadataUrl: `${baseUrl}/api/v1/creatures/metadata/${wallet}/${badgeId}.json`,
+    imageUrl: `${baseUrl}/api/v1/creatures/image/${wallet}/${badgeId}.gif${saltSuffix}`,
+    pngUrl: `${baseUrl}/api/v1/creatures/image/${wallet}/${badgeId}.png${saltSuffix}`,
+    metadataUrl: `${baseUrl}/api/v1/creatures/metadata/${wallet}/${badgeId}.json${saltSuffix}`,
     permanent: false,
   };
 }

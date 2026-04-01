@@ -429,6 +429,46 @@ export async function evaluateChallenges(
 }
 
 /**
+ * Re-check daily sweep bonus after a lucky drop CHALLENGE_SKIP may have
+ * completed the 3rd daily challenge. Called only when the sweep wasn't
+ * already awarded in the main evaluateChallenges pass.
+ */
+export async function recheckDailySweep(
+  userId: string,
+  burnDate: string,
+  txn: DB,
+): Promise<{ dailySweepXp: number }> {
+  const dailyDefs = getDailyChallengesForDate(userId, burnDate);
+  const progress = await txn
+    .select({ challengeId: dailyChallengeProgress.challengeId, completed: dailyChallengeProgress.completed })
+    .from(dailyChallengeProgress)
+    .where(and(
+      eq(dailyChallengeProgress.userId, userId),
+      eq(dailyChallengeProgress.challengeDate, burnDate),
+    ));
+
+  const completedIds = new Set(progress.filter(p => p.completed).map(p => p.challengeId));
+  const allComplete = dailyDefs.every(d => completedIds.has(d.id));
+  if (!allComplete) return { dailySweepXp: 0 };
+
+  // Check dedup — was sweep already awarded today?
+  const [sweepCheck] = await txn
+    .select({ id: xpLedger.id })
+    .from(xpLedger)
+    .where(and(
+      eq(xpLedger.userId, userId),
+      eq(xpLedger.reason, 'DAILY_SWEEP'),
+      sql`DATE(${xpLedger.createdAt} AT TIME ZONE 'UTC') = ${burnDate}`,
+    ))
+    .limit(1);
+
+  if (sweepCheck) return { dailySweepXp: 0 };
+
+  await grantXp({ userId, amount: DAILY_SWEEP_BONUS_XP, reason: 'DAILY_SWEEP', refId: burnDate }, txn);
+  return { dailySweepXp: DAILY_SWEEP_BONUS_XP };
+}
+
+/**
  * Get current challenge state for a user (for the GET endpoint).
  */
 export async function getChallengeState(

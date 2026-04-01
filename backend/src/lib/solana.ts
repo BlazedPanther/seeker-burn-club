@@ -1,5 +1,6 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { env } from '../config/env.js';
+import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from './spl-token-compat.js';
 
 /** RPC connection with request timeout to prevent hung requests from exhausting the DB pool. */
 export const connection = new Connection(env.SOLANA_RPC_URL, {
@@ -19,8 +20,7 @@ export const connection = new Connection(env.SOLANA_RPC_URL, {
 export const SKR_MINT = new PublicKey(env.SKR_MINT);
 export const TREASURY_WALLET = new PublicKey(env.TREASURY_WALLET);
 export const TREASURY_SKR_ATA = new PublicKey(env.TREASURY_SKR_ATA);
-export const TOKEN_PROGRAM_ID = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-export const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
+export { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID };
 
 /**
  * Derive the user's SKR ATA from their wallet address.

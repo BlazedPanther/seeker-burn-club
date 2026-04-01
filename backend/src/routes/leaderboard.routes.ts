@@ -135,24 +135,31 @@ export async function leaderboardRoutes(fastify: FastifyInstance) {
     let userRank = rankedResults.find(r => r.walletAddress === wallet);
     if (!userRank) {
       // User not in current page — compute rank with parameterized query (no sql.raw)
-      const [countResult] = await db.execute(config.rankQuery(wallet));
-      const row = countResult as unknown as RankRow;
-      const rank = Number(row?.rank ?? 0);
-      const value = Number(row?.value ?? 0);
-      if (rank > 0) {
-        // Fetch the user's profile title for the rank card
-        const [userRow] = await db
-          .select({ profileTitle: users.profileTitle })
-          .from(users)
-          .where(sql`wallet_address = ${wallet}`)
-          .limit(1);
-        userRank = {
-          rank,
-          walletAddress: wallet,
-          value,
-          displayValue: `${value}${config.displaySuffix}`,
-          profileTitle: userRow?.profileTitle ?? null,
-        };
+      // First verify user exists to avoid returning rank #1 for unknown wallets
+      const [existsRow] = await db
+        .select({ walletAddress: users.walletAddress })
+        .from(users)
+        .where(sql`wallet_address = ${wallet}`)
+        .limit(1);
+      if (existsRow) {
+        const [countResult] = await db.execute(config.rankQuery(wallet));
+        const row = countResult as unknown as RankRow;
+        const rank = Number(row?.rank ?? 0);
+        const value = Number(row?.value ?? 0);
+        if (rank > 0) {
+          const [userRow] = await db
+            .select({ profileTitle: users.profileTitle })
+            .from(users)
+            .where(sql`wallet_address = ${wallet}`)
+            .limit(1);
+          userRank = {
+            rank,
+            walletAddress: wallet,
+            value,
+            displayValue: `${value}${config.displaySuffix}`,
+            profileTitle: userRow?.profileTitle ?? null,
+          };
+        }
       }
     }
 
