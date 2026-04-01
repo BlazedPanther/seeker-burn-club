@@ -88,6 +88,8 @@ data class BurnSubmitResponse(
     val leveledUp: Boolean? = null,
     val shieldsAwarded: Int? = null,
     val luckyDrop: LuckyDropInfo? = null,
+    val luckyDropsToday: Int? = null,
+    val maxDailyLuckyDrops: Int? = null,
     val submittedAt: String,
 )
 
@@ -559,6 +561,8 @@ data class ActiveBuff(
 data class InventoryResponse(
     val inventory: List<InventoryItem>,
     val activeBuffs: List<ActiveBuff>,
+    val luckyDropsToday: Int? = null,
+    val maxDailyLuckyDrops: Int? = null,
 )
 
 @Serializable

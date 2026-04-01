@@ -40,6 +40,8 @@ export interface BurnResult {
   shieldsAwarded: number;
   challengeResults?: ChallengeResult;
   luckyDrop?: LuckyDropResult;
+  luckyDropsToday: number;
+  maxDailyLuckyDrops: number;
 }
 
 /**
@@ -481,5 +483,7 @@ export async function verifyAndRecordBurn(
     shieldsAwarded: burnRecord.shieldsAwarded,
     challengeResults: burnRecord.challengeResults,
     luckyDrop: burnRecord.luckyDrop.dropped ? burnRecord.luckyDrop : undefined,
+    luckyDropsToday: burnRecord.luckyDrop.luckyDropsToday,
+    maxDailyLuckyDrops: burnRecord.luckyDrop.maxDailyLuckyDrops,
   };
 }

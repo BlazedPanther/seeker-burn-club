@@ -35,6 +35,9 @@ import { getDailyChallengesForDate } from './challenges.service.js';
 /** Minimum SKR (UI units) per burn to be eligible for a lucky drop. */
 export const MIN_LUCKY_BURN_SKR = 3;
 
+/** Maximum lucky drops a user can receive per calendar day (UTC). */
+export const MAX_DAILY_LUCKY_DROPS = 3;
+
 /** Maximum XP multiplier from buff stacking. */
 export const MAX_XP_MULTIPLIER = 3;
 
@@ -258,6 +261,8 @@ export interface LuckyDropResult {
   };
   xpAwarded?: number;
   shieldsAwarded?: number;
+  luckyDropsToday: number;
+  maxDailyLuckyDrops: number;
 }
 
 /**
@@ -279,7 +284,14 @@ export async function rollLuckyDrop(
 ): Promise<LuckyDropResult> {
   // Must burn at least MIN_LUCKY_BURN_SKR to be eligible for drops
   if (burnAmountSkr < MIN_LUCKY_BURN_SKR) {
-    return { dropped: false };
+    const todayCount = await countDropsToday(userId, txn);
+    return { dropped: false, luckyDropsToday: todayCount, maxDailyLuckyDrops: MAX_DAILY_LUCKY_DROPS };
+  }
+
+  // Daily limit check
+  const dropsToday = await countDropsToday(userId, txn);
+  if (dropsToday >= MAX_DAILY_LUCKY_DROPS) {
+    return { dropped: false, luckyDropsToday: dropsToday, maxDailyLuckyDrops: MAX_DAILY_LUCKY_DROPS };
   }
   // Check for active LOOT_LUCK buff (increases drop chance)
   let dropChance = getDropChance(streak);
@@ -307,7 +319,7 @@ export async function rollLuckyDrop(
 
   // Roll the dice
   if (Math.random() > dropChance) {
-    return { dropped: false };
+    return { dropped: false, luckyDropsToday: dropsToday, maxDailyLuckyDrops: MAX_DAILY_LUCKY_DROPS };
   }
 
   // Pick rarity then item
@@ -460,7 +472,33 @@ export async function rollLuckyDrop(
     },
     xpAwarded: xpAwarded > 0 ? xpAwarded : undefined,
     shieldsAwarded: shieldsAwarded > 0 ? shieldsAwarded : undefined,
+    luckyDropsToday: dropsToday + 1,
+    maxDailyLuckyDrops: MAX_DAILY_LUCKY_DROPS,
   };
+}
+
+/** Count how many lucky drops a user received today (UTC). */
+async function countDropsToday(userId: string, txn: DB): Promise<number> {
+  const [row] = await txn
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(luckyDrops)
+    .where(and(
+      eq(luckyDrops.userId, userId),
+      gte(luckyDrops.createdAt, sql`DATE_TRUNC('day', NOW() AT TIME ZONE 'UTC')`),
+    ));
+  return row?.count ?? 0;
+}
+
+/** Get today's lucky drop count for a user (for display). */
+export async function getLuckyDropsToday(userId: string): Promise<{ luckyDropsToday: number; maxDailyLuckyDrops: number }> {
+  const [row] = await db
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(luckyDrops)
+    .where(and(
+      eq(luckyDrops.userId, userId),
+      gte(luckyDrops.createdAt, sql`DATE_TRUNC('day', NOW() AT TIME ZONE 'UTC')`),
+    ));
+  return { luckyDropsToday: row?.count ?? 0, maxDailyLuckyDrops: MAX_DAILY_LUCKY_DROPS };
 }
 
 /**

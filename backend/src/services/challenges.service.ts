@@ -330,11 +330,13 @@ export async function evaluateChallenges(
   `);
   const wagg = weeklyAgg as { weekly_burn_days: number; weekly_volume: number; weekly_burn_count: number } | undefined;
 
-  // Build a weekly-aware context, adding Golden Burn multiplier delta for this burn
+  // Build a weekly-aware context including the current burn (not yet in DB).
+  // ctx.dailyBurnCount === 1 means this is the first burn today → add today to days.
+  // ctx.burnAmount already includes the golden burn multiplier (consistent with dailyVolume).
   const weeklyCtx: BurnContext = {
     ...ctx,
-    weeklyBurnDays: (wagg?.weekly_burn_days ?? 0),
-    weeklyVolume: (wagg?.weekly_volume ?? 0) + ctx.goldenBurnVolumeDelta,
+    weeklyBurnDays: (wagg?.weekly_burn_days ?? 0) + (ctx.dailyBurnCount === 1 ? 1 : 0),
+    weeklyVolume: (wagg?.weekly_volume ?? 0) + ctx.burnAmount,
   };
 
   const weeklyResults = [];
@@ -342,8 +344,8 @@ export async function evaluateChallenges(
     // For weekly challenges, re-evaluate with weekly aggregates
     let evalResult: { progress: number; target: number };
     if (def.id === 'grind_lord') {
-      // Special: use weekly burn count + golden burn count delta
-      evalResult = { progress: (wagg?.weekly_burn_count ?? 0) + ctx.goldenBurnCountDelta, target: 20 };
+      // +1 for the current burn (not yet inserted in DB)
+      evalResult = { progress: (wagg?.weekly_burn_count ?? 0) + 1, target: 20 };
     } else {
       evalResult = def.evaluate(weeklyCtx);
     }

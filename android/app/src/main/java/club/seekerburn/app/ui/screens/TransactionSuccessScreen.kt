@@ -40,6 +40,8 @@ fun TransactionSuccessScreen(
     luckyDropItemId: String? = null,
     luckyDropRarity: String? = null,
     luckyDropEffect: String? = null,
+    luckyDropsToday: Int? = null,
+    maxDailyLuckyDrops: Int = 3,
     xpEarned: Int? = null,
     newLevel: Int? = null,
     levelTitle: String? = null,
@@ -206,7 +208,7 @@ fun TransactionSuccessScreen(
 
         // Lucky Drop section
         val burnAmountNum = burnAmount.toDoubleOrNull() ?: 0.0
-        if (luckyDropName == null && burnAmountNum < 3.0) {
+        if (luckyDropName == null) {
             Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -215,11 +217,29 @@ fun TransactionSuccessScreen(
             ) {
                 BurnIcon(icon = BurnIcons.StarGlow, contentDescription = null, size = 14.dp)
                 Spacer(modifier = Modifier.width(6.dp))
+                if (burnAmountNum < 3.0) {
                     Text(
-                        text = "Burn ≥3 SKR per burn for a Lucky Drop chance (no daily cap)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.textTertiary,
-                )
+                        text = "Burn ≥3 SKR per burn for a Lucky Drop chance (max 3/day)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textTertiary,
+                    )
+                } else if (luckyDropsToday != null) {
+                    val remaining = maxDailyLuckyDrops - luckyDropsToday
+                    Text(
+                        text = if (remaining > 0)
+                            "$luckyDropsToday/$maxDailyLuckyDrops Lucky Drops today — $remaining remaining"
+                        else
+                            "$luckyDropsToday/$maxDailyLuckyDrops Lucky Drops today — limit reached",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (remaining > 0) colors.textTertiary else colors.warning,
+                    )
+                } else {
+                    Text(
+                        text = "No Lucky Drop this time — burn again for another chance!",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textTertiary,
+                    )
+                }
             }
         }
         if (luckyDropName != null) {

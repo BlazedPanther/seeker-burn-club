@@ -20,6 +20,8 @@ data class InventoryUiState(
     val inventory: List<InventoryItem> = emptyList(),
     val activeBuffs: List<ActiveBuff> = emptyList(),
     val recentDrops: List<LuckyDropHistoryItem> = emptyList(),
+    val luckyDropsToday: Int = 0,
+    val maxDailyLuckyDrops: Int = 3,
 )
 
 @HiltViewModel
@@ -42,6 +44,8 @@ class InventoryViewModel @Inject constructor(
                         inventory = inventoryResp.inventory,
                         activeBuffs = inventoryResp.activeBuffs,
                         recentDrops = historyResp.drops,
+                        luckyDropsToday = inventoryResp.luckyDropsToday ?: 0,
+                        maxDailyLuckyDrops = inventoryResp.maxDailyLuckyDrops ?: 3,
                     )
                 }
             } catch (e: Exception) {

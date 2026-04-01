@@ -87,6 +87,50 @@ fun InventoryScreen(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    // Daily Lucky Drop counter
+                    item {
+                        val dropped = uiState.luckyDropsToday
+                        val total = uiState.maxDailyLuckyDrops
+                        val remaining = total - dropped
+                        BurnCard {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    BurnIcon(icon = BurnIcons.StarGlow, contentDescription = null, size = 20.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Lucky Drops Today",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = colors.textPrimary,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                                Text(
+                                    text = "$dropped / $total",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = if (remaining > 0) colors.primary else colors.warning,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            if (remaining == 0) {
+                                Text(
+                                    text = "Daily limit reached — resets at midnight UTC",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.textTertiary,
+                                )
+                            } else {
+                                Text(
+                                    text = "$remaining drop${if (remaining != 1) "s" else ""} remaining today",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.textTertiary,
+                                )
+                            }
+                        }
+                    }
+
                     // Active Buffs section
                     if (uiState.activeBuffs.isNotEmpty()) {
                         item {
@@ -124,7 +168,7 @@ fun InventoryScreen(
                                         color = colors.textSecondary,
                                     )
                                     Text(
-                                        text = "Burn \u22653 SKR per burn to get Lucky Drops (no daily cap)!",
+                                        text = "Burn \u22653 SKR per burn to get Lucky Drops (max 3/day)!",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = colors.textTertiary,
                                         textAlign = TextAlign.Center,

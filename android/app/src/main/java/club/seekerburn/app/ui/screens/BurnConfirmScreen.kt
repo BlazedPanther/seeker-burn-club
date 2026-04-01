@@ -37,7 +37,7 @@ import kotlinx.coroutines.launch
 fun BurnConfirmScreen(
     walletSender: ActivityResultSender,
     onDismiss: () -> Unit,
-    onBurnSubmitted: (signature: String, newStreak: Int, burnAmount: String, badgeEarned: String?, badgeEarnedId: String?, luckyDropName: String?, luckyDropItemId: String?, luckyDropRarity: String?, luckyDropEffect: String?, xpEarned: Int?, newLevel: Int?, levelTitle: String?, leveledUp: Boolean?) -> Unit,
+    onBurnSubmitted: (signature: String, newStreak: Int, burnAmount: String, badgeEarned: String?, badgeEarnedId: String?, luckyDropName: String?, luckyDropItemId: String?, luckyDropRarity: String?, luckyDropEffect: String?, luckyDropsToday: Int?, xpEarned: Int?, newLevel: Int?, levelTitle: String?, leveledUp: Boolean?) -> Unit,
     onBurnSigned: (signature: String, burnAmount: String, feeAmount: String) -> Unit = { _, _, _ -> },
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -312,6 +312,7 @@ fun BurnConfirmScreen(
                                     submitResponse.luckyDrop?.item?.id,
                                     submitResponse.luckyDrop?.item?.rarity,
                                     submitResponse.luckyDrop?.item?.effectDescription,
+                                    submitResponse.luckyDropsToday,
                                     submitResponse.xpEarned,
                                     submitResponse.level,
                                     submitResponse.levelTitle,

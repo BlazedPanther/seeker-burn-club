@@ -65,6 +65,8 @@ export async function burnRoutes(fastify: FastifyInstance) {
         leveledUp: result.leveledUp,
         shieldsAwarded: result.shieldsAwarded,
         luckyDrop: result.luckyDrop ?? null,
+        luckyDropsToday: result.luckyDropsToday,
+        maxDailyLuckyDrops: result.maxDailyLuckyDrops,
         challengeResults: result.challengeResults ?? null,
         submittedAt: new Date().toISOString(),
       });

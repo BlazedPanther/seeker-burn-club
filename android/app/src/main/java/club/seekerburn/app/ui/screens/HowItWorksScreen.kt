@@ -115,7 +115,7 @@ fun HowItWorksScreen(
                 icon = BurnIcons.StarGlow,
                 title = "LUCKY BURNS",
                 items = listOf(
-                    "Every burn of 3+ SKR has a chance to drop a random item (per burn, not 3/day).",
+                    "Every burn of 3+ SKR has a chance to drop a random item (max 3 drops/day).",
                     "Drop chance increases with your streak (8\u201325%).",
                     "6 rarity tiers: Common, Uncommon, Rare, Epic, Legendary, Mythic.",
                     "Items include instant XP, XP multipliers, Streak Shields, and more.",

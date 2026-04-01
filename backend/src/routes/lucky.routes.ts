@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { getUserInventory, getUserBuffs, getRecentDrops, getItemCatalog } from '../services/lucky.service.js';
+import { getUserInventory, getUserBuffs, getRecentDrops, getItemCatalog, getLuckyDropsToday } from '../services/lucky.service.js';
 
 export async function luckyRoutes(fastify: FastifyInstance) {
   fastify.addHook('onRequest', fastify.authenticate);
@@ -10,12 +10,13 @@ export async function luckyRoutes(fastify: FastifyInstance) {
     const userId = await resolveUserId(wallet);
     if (!userId) return reply.code(404).send({ error: 'USER_NOT_FOUND' });
 
-    const [inventory, buffs] = await Promise.all([
+    const [inventory, buffs, dropLimit] = await Promise.all([
       getUserInventory(userId),
       getUserBuffs(userId),
+      getLuckyDropsToday(userId),
     ]);
 
-    return reply.code(200).send({ inventory, activeBuffs: buffs });
+    return reply.code(200).send({ inventory, activeBuffs: buffs, ...dropLimit });
   });
 
   // GET /api/v1/lucky/history — recent drops
