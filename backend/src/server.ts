@@ -201,6 +201,17 @@ async function buildServer() {
     return reply.code(healthy ? 200 : 503).send(checks);
   });
 
+  // -- Version / compatibility check (PUBLIC) --
+
+  fastify.get('/api/v1/version', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (_request, reply) => {
+    return reply.code(200).send({
+      apiVersion: '1.1.0',
+      minClientVersion: 2,   // versionCode — clients below this must update
+    });
+  });
+
   // -- Routes --
 
   await fastify.register(authRoutes);

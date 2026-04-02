@@ -94,6 +94,7 @@ export async function leaderboardRoutes(fastify: FastifyInstance) {
   // GET /api/v1/leaderboard/:type (authenticated)
   fastify.get('/api/v1/leaderboard/:type', {
     onRequest: [fastify.authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
   }, async (request, reply) => {
     const wallet = request.user.sub;
     const { type } = request.params as { type: string };
@@ -185,7 +186,9 @@ export async function leaderboardRoutes(fastify: FastifyInstance) {
 
   // GET /api/v1/leaderboard/global/stats (PUBLIC — no auth required)
   // Global burn statistics for the entire program
-  fastify.get('/api/v1/leaderboard/global/stats', async (request, reply) => {
+  fastify.get('/api/v1/leaderboard/global/stats', {
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     // Try cache first (60 second TTL for public endpoint)
     try {
       const cached = await redis.get('global:stats');

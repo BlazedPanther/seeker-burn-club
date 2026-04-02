@@ -14,7 +14,9 @@ interface StatsRow extends Record<string, unknown> {
 export async function treasuryRoutes(fastify: FastifyInstance) {
 
   // GET /api/v1/treasury/stats — PUBLIC (no auth required for transparency)
-  fastify.get('/api/v1/treasury/stats', async (request, reply) => {
+  fastify.get('/api/v1/treasury/stats', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request, reply) => {
     // Try cache first
     try {
       const cached = await redis.get('treasury:stats');
