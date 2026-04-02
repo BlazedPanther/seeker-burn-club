@@ -101,7 +101,7 @@ export function formatUnits(amount: bigint, decimals: number): string {
 /**
  * Add two decimal strings with fixed precision (avoids floating-point).
  */
-export function addDecimalStrings(a: string, b: string, precision: number = 6): string {
+export function addDecimalStrings(a: string, b: string, precision: number): string {
   const aBase = parseUnits(a, precision);
   const bBase = parseUnits(b, precision);
   return formatUnits(aBase + bBase, precision);

@@ -217,7 +217,7 @@ export async function verifyAndRecordBurn(
     securityLog({ eventType: 'BURN_TX_TOO_OLD', walletAddress, severity: 'WARN', details: { signature, blockTime, serverTime: now, window: env.TX_FRESHNESS_WINDOW } });
     throw new Error('TRANSACTION_TOO_OLD');
   }
-  if (blockTime - now > 60) {
+  if (blockTime - now > 120) {
     securityLog({ eventType: 'BURN_TX_FUTURE', walletAddress, severity: 'WARN', details: { signature, blockTime, serverTime: now } });
     throw new Error('TRANSACTION_FROM_FUTURE');
   }
@@ -279,21 +279,19 @@ export async function verifyAndRecordBurn(
     // Recompute streak using locked state.
     const yesterday = yesterdayUTC(burnDate);
 
-    // Shield gap coverage: if user missed days but has shields, consume them
+    // Recovery window: if user has an active recovery window and burns,
+    // auto-consume shields to recover the streak (they're clearly active).
     let shieldsConsumedInBurn = 0;
+    const hasRecoveryWindow = lockedUser.streakRecoveryDeadline &&
+      new Date(lockedUser.streakRecoveryDeadline) > new Date();
+
     if (
+      hasRecoveryWindow &&
       lockedUser.currentStreak > 0 &&
-      lockedUser.streakShields > 0 &&
-      lockedUser.lastBurnDate &&
-      lockedUser.lastBurnDate !== yesterday &&
-      lockedUser.lastBurnDate !== burnDate
+      lockedUser.streakRecoveryGapDays > 0 &&
+      lockedUser.streakShields >= lockedUser.streakRecoveryGapDays
     ) {
-      const lastDate = new Date(lockedUser.lastBurnDate + 'T00:00:00Z');
-      const yestDate = new Date(yesterday + 'T00:00:00Z');
-      const gapDays = Math.round((yestDate.getTime() - lastDate.getTime()) / 86_400_000);
-      if (gapDays > 0 && gapDays <= lockedUser.streakShields) {
-        shieldsConsumedInBurn = gapDays;
-      }
+      shieldsConsumedInBurn = lockedUser.streakRecoveryGapDays;
     }
 
     if (lockedUser.lastBurnDate === yesterday || shieldsConsumedInBurn > 0) {
@@ -424,7 +422,7 @@ export async function verifyAndRecordBurn(
     // If lucky drop included a CHALLENGE_SKIP and sweep wasn't already awarded,
     // re-check whether all 3 dailies are now complete for the sweep bonus.
     if (luckyDrop.dropped && !challengeResults.dailySweep) {
-      const sweepRecheck = await recheckDailySweep(lockedUser.id, burnDate, dbTx);
+      const sweepRecheck = await recheckDailySweep(lockedUser.id, walletAddress, burnDate, dbTx);
       if (sweepRecheck.dailySweepXp > 0) {
         totalXpThisBurn += sweepRecheck.dailySweepXp;
         challengeResults.dailySweep = true;
@@ -445,6 +443,8 @@ export async function verifyAndRecordBurn(
         ...(shieldsConsumedInBurn > 0 ? {
           streakShields: sql`GREATEST(${users.streakShields} - ${shieldsConsumedInBurn}, 0)`,
           streakShieldActive: sql`CASE WHEN ${users.streakShields} > ${shieldsConsumedInBurn} THEN true ELSE false END`,
+          streakRecoveryDeadline: null,
+          streakRecoveryGapDays: 0,
         } : {}),
         updatedAt: new Date(),
       })

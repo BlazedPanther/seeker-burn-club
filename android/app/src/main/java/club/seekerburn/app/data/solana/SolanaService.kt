@@ -24,8 +24,8 @@ class SolanaService @Inject constructor() {
     private val treasuryATA by lazy { PublicKey(SeekerBurnConfig.TREASURY_SKR_ATA) }
 
     companion object {
-        private const val SPL_TOKEN_TRANSFER: Byte = 3
-        private const val SPL_TOKEN_BURN: Byte = 8
+        private const val SPL_TOKEN_TRANSFER_CHECKED: Byte = 12
+        private const val SPL_TOKEN_BURN_CHECKED: Byte = 15
         private val TOKEN_PROGRAM = PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
         private val ATA_PROGRAM = PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
     }
@@ -147,13 +147,14 @@ class SolanaService @Inject constructor() {
     ): ByteArray = withContext(Dispatchers.IO) {
         val wallet = PublicKey(walletAddress)
         val userATA = deriveATA(wallet, skrMint)
+        val decimals = fetchMintDecimals()
         val recentBlockhash = connection.getLatestBlockhash()
 
         val instructions = mutableListOf<Instruction>()
-        instructions.add(buildSplBurnInstruction(userATA, skrMint, wallet, burnAmountBaseUnits))
+        instructions.add(buildSplBurnCheckedInstruction(userATA, skrMint, wallet, burnAmountBaseUnits, decimals))
 
         if (feeAmountBaseUnits > 0) {
-            instructions.add(buildSplTransferInstruction(userATA, treasuryATA, wallet, feeAmountBaseUnits))
+            instructions.add(buildSplTransferCheckedInstruction(userATA, skrMint, treasuryATA, wallet, feeAmountBaseUnits, decimals))
         }
 
         // MWA wire format requires: [compact-u16: numSigs=1] [64 zero-byte placeholder] [message...]
@@ -173,12 +174,13 @@ class SolanaService @Inject constructor() {
     ): ByteArray = withContext(Dispatchers.IO) {
         val wallet = PublicKey(walletAddress)
         val userATA = deriveATA(wallet, skrMint)
+        val decimals = fetchMintDecimals()
         val recentBlockhash = connection.getLatestBlockhash()
 
         // Same wire-format fix as buildBurnTransaction — placeholder signature required.
         val tx = Transaction(
             recentBlockhash,
-            listOf(buildSplTransferInstruction(userATA, treasuryATA, wallet, amountBaseUnits)),
+            listOf(buildSplTransferCheckedInstruction(userATA, skrMint, treasuryATA, wallet, amountBaseUnits, decimals)),
             wallet,
         )
         return@withContext withSignaturePlaceholder(tx.serialize())
@@ -212,11 +214,12 @@ class SolanaService @Inject constructor() {
     ): ByteArray = withContext(Dispatchers.IO) {
         val wallet = PublicKey(walletAddress)
         val userATA = deriveATA(wallet, skrMint)
+        val decimals = fetchMintDecimals()
         val recentBlockhash = connection.getLatestBlockhash()
 
         val tx = Transaction(
             recentBlockhash,
-            listOf(buildSplTransferInstruction(userATA, treasuryATA, wallet, amountBaseUnits)),
+            listOf(buildSplTransferCheckedInstruction(userATA, skrMint, treasuryATA, wallet, amountBaseUnits, decimals)),
             wallet,
         )
         return@withContext withSignaturePlaceholder(tx.serialize())
@@ -224,13 +227,19 @@ class SolanaService @Inject constructor() {
 
     // ── Raw SPL instruction builders ──
 
-    private fun buildSplBurnInstruction(
-        source: PublicKey, mint: PublicKey, owner: PublicKey, amount: Long,
+    /**
+     * BurnChecked (opcode 15): includes mint + decimals so wallets can decode
+     * the token type and show a human-readable approval screen.
+     * Accounts: [source (w), mint (w), authority (s)]
+     * Data:     [15, amount:u64, decimals:u8]
+     */
+    private fun buildSplBurnCheckedInstruction(
+        source: PublicKey, mint: PublicKey, owner: PublicKey, amount: Long, decimals: Int,
     ): Instruction {
-        val data = ByteArray(9)
-        data[0] = SPL_TOKEN_BURN
+        val data = ByteArray(10)
+        data[0] = SPL_TOKEN_BURN_CHECKED
         putLongLE(data, 1, amount)
-        // sol4k 0.5.3: BaseInstruction(data, keys, programId)
+        data[9] = decimals.toByte()
         return BaseInstruction(
             data,
             listOf(
@@ -242,18 +251,27 @@ class SolanaService @Inject constructor() {
         )
     }
 
-    private fun buildSplTransferInstruction(
-        source: PublicKey, destination: PublicKey, owner: PublicKey, amount: Long,
+    /**
+     * TransferChecked (opcode 12): includes mint + decimals so wallets can decode
+     * the token type, amount, and destination for a clear approval screen.
+     * Accounts: [source (w), mint (r), destination (w), authority (s)]
+     * Data:     [12, amount:u64, decimals:u8]
+     */
+    private fun buildSplTransferCheckedInstruction(
+        source: PublicKey, mint: PublicKey, destination: PublicKey, owner: PublicKey,
+        amount: Long, decimals: Int,
     ): Instruction {
-        val data = ByteArray(9)
-        data[0] = SPL_TOKEN_TRANSFER
+        val data = ByteArray(10)
+        data[0] = SPL_TOKEN_TRANSFER_CHECKED
         putLongLE(data, 1, amount)
+        data[9] = decimals.toByte()
         return BaseInstruction(
             data,
             listOf(
-                AccountMeta.writable(source),       // source ATA (writable)
-                AccountMeta.writable(destination),   // destination ATA (writable)
-                AccountMeta.signer(owner),           // authority (signer)
+                AccountMeta.writable(source),                                    // source ATA
+                AccountMeta(mint, isSigner = false, isWritable = false),          // mint (read-only)
+                AccountMeta.writable(destination),                                // destination ATA
+                AccountMeta.signer(owner),                                        // authority
             ),
             TOKEN_PROGRAM,
         )

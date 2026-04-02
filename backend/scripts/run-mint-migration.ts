@@ -1,7 +1,10 @@
 import postgres from 'postgres';
 
-const DATABASE_URL = process.env.DATABASE_URL
-  || 'REDACTED_DB_URL';
+const DATABASE_URL = process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL;
+if (!DATABASE_URL) {
+  console.error('Set DATABASE_URL or DATABASE_PUBLIC_URL env var (use: railway run --service Postgres)');
+  process.exit(1);
+}
 
 const sql = postgres(DATABASE_URL);
 

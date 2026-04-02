@@ -5,6 +5,7 @@
 -- XP columns on users table
 -- ──────────────────────────────────────────
 ALTER TABLE users ADD COLUMN IF NOT EXISTS xp BIGINT NOT NULL DEFAULT 0;
+-- NOTE: Drizzle schema uses bigint({ mode: 'number' }) for this column.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS level INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS streak_shields INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_title VARCHAR(40);
@@ -68,7 +69,7 @@ CREATE TABLE IF NOT EXISTS shield_purchases (
   wallet_address  VARCHAR(44) NOT NULL,
   tx_signature    VARCHAR(88) NOT NULL UNIQUE,
   shield_count    INTEGER NOT NULL,
-  price_lamports  BIGINT NOT NULL,
+  price_lamports  NUMERIC(20,0) NOT NULL,
   price_usd       NUMERIC(10,2) NOT NULL,
   status          VARCHAR(20) NOT NULL DEFAULT 'PENDING',  -- PENDING, VERIFIED, FAILED
   verified_at     TIMESTAMPTZ,

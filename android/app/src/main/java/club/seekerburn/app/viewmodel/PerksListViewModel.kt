@@ -26,12 +26,50 @@ class PerksListViewModel @Inject constructor(
 
     fun refresh() = loadPerks()
 
+    fun recoverStreak() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(recoveringStreak = true) }
+            try {
+                val result = api.recoverStreak()
+                _uiState.update {
+                    it.copy(
+                        recoveringStreak = false,
+                        streakRecoverable = false,
+                        streakRecoveryDeadline = null,
+                        streakRecoveryGapDays = 0,
+                        streakShields = result.shieldsRemaining,
+                        recoverySuccess = "Streak recovered! Used ${result.shieldsConsumed} shield(s)",
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(recoveringStreak = false, recoveryError = e.message) }
+            }
+        }
+    }
+
+    fun clearRecoveryMessages() {
+        _uiState.update { it.copy(recoverySuccess = null, recoveryError = null) }
+    }
+
     private fun loadPerks() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                val perks = api.getPerks()
-                _uiState.update { it.copy(isLoading = false, perks = perks) }
+                val perksDeferred = kotlinx.coroutines.async { api.getPerks() }
+                val profileDeferred = kotlinx.coroutines.async { try { api.getProfile() } catch (_: Exception) { null } }
+                val perks = perksDeferred.await()
+                val profile = profileDeferred.await()
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        perks = perks,
+                        streakRecoverable = profile?.streakRecoverable ?: false,
+                        streakRecoveryDeadline = profile?.streakRecoveryDeadline,
+                        streakRecoveryGapDays = profile?.streakRecoveryGapDays ?: 0,
+                        streakShields = profile?.streakShields ?: 0,
+                        currentStreak = profile?.currentStreak ?: 0,
+                    )
+                }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
             }
@@ -43,4 +81,12 @@ data class PerksListUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val perks: List<Perk> = emptyList(),
+    val streakRecoverable: Boolean = false,
+    val streakRecoveryDeadline: String? = null,
+    val streakRecoveryGapDays: Int = 0,
+    val streakShields: Int = 0,
+    val currentStreak: Int = 0,
+    val recoveringStreak: Boolean = false,
+    val recoverySuccess: String? = null,
+    val recoveryError: String? = null,
 )

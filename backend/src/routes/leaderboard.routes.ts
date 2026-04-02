@@ -11,7 +11,7 @@ interface UserRow {
   longestStreak: number;
   lifetimeBurned: string;
   badgeCount: number;
-  xp: string;
+  xp: number;
 }
 
 /** Type for raw SQL rank queries. */
@@ -33,9 +33,9 @@ const LEADERBOARD_CONFIG = {
     rankQuery: (wallet: string) => sql`
       SELECT COUNT(*) + 1 as rank, u.longest_streak as value
       FROM users u
-      WHERE u.longest_streak > (
+      WHERE u.longest_streak > COALESCE((
         SELECT longest_streak FROM users WHERE wallet_address = ${wallet}
-      )`,
+      ), 0)`,
   },
   lifetime: {
     orderColumn: users.lifetimeBurned,
@@ -44,9 +44,9 @@ const LEADERBOARD_CONFIG = {
     rankQuery: (wallet: string) => sql`
       SELECT COUNT(*) + 1 as rank, u.lifetime_burned as value
       FROM users u
-      WHERE u.lifetime_burned > (
+      WHERE CAST(u.lifetime_burned AS NUMERIC) > COALESCE(CAST((
         SELECT lifetime_burned FROM users WHERE wallet_address = ${wallet}
-      )`,
+      ) AS NUMERIC), 0)`,
   },
   badges: {
     orderColumn: users.badgeCount,
@@ -84,6 +84,10 @@ const LEADERBOARD_CONFIG = {
 } as const;
 
 type LeaderboardType = keyof typeof LEADERBOARD_CONFIG;
+
+/** In-process fallback cache for global stats when Redis is down. */
+let _inProcessStatsCache: { data: unknown; expiresAt: number } | null = null;
+let _inProcessComputing = false;
 
 export async function leaderboardRoutes(fastify: FastifyInstance) {
 
@@ -204,8 +208,19 @@ export async function leaderboardRoutes(fastify: FastifyInstance) {
         const cached = await redis.get('global:stats');
         if (cached) return reply.code(200).send(JSON.parse(cached));
       } catch { /* fall through to compute */ }
+      // In-process fallback: if Redis is completely down, return stale cache to prevent stampede
+      if (_inProcessStatsCache && _inProcessStatsCache.expiresAt > Date.now()) {
+        return reply.code(200).send(_inProcessStatsCache.data);
+      }
+      if (_inProcessComputing) {
+        // Another request is already computing — return 503 instead of stampeding DB
+        return reply.code(503).send({ error: 'STATS_COMPUTING', message: 'Please retry shortly.' });
+      }
     }
 
+    _inProcessComputing = true;
+
+    try {
     // Parallel fetch all independent aggregation queries
     const burnStatsP = db.execute(sql`SELECT
       COALESCE(SUM(burn_amount), 0) as total_burned,
@@ -269,7 +284,13 @@ export async function leaderboardRoutes(fastify: FastifyInstance) {
 
     // Cache for 60 seconds
     try { await redis.setex('global:stats', 60, JSON.stringify(stats)); } catch { /* Redis down — skip cache */ }
+    _inProcessStatsCache = { data: stats, expiresAt: Date.now() + 60_000 };
+    _inProcessComputing = false;
 
     return reply.code(200).send(stats);
+    } catch (err) {
+      _inProcessComputing = false;
+      throw err;
+    }
   });
 }

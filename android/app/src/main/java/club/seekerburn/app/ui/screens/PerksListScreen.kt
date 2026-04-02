@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import club.seekerburn.app.model.Perk
@@ -85,14 +86,72 @@ fun PerksListScreen(
                 }
             }
             else -> {
+                val snackbarHostState = remember { SnackbarHostState() }
+
+                // Show recovery success/error messages
+                LaunchedEffect(uiState.recoverySuccess, uiState.recoveryError) {
+                    val msg = uiState.recoverySuccess ?: uiState.recoveryError
+                    if (msg != null) {
+                        snackbarHostState.showSnackbar(msg)
+                        viewModel.clearRecoveryMessages()
+                    }
+                }
+
+                Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    // Recovery banner at top of perks list
+                    if (uiState.streakRecoverable && uiState.streakShields >= uiState.streakRecoveryGapDays) {
+                        item(key = "recovery_banner") {
+                            BurnCard {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Text(
+                                        text = "\uD83D\uDEE1\uFE0F Streak in Danger!",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = colors.primary,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = "Use ${uiState.streakRecoveryGapDays} Shield(s) to save your ${uiState.currentStreak}-day streak",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = colors.textSecondary,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Button(
+                                        onClick = { viewModel.recoverStreak() },
+                                        enabled = !uiState.recoveringStreak,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = colors.primary,
+                                        ),
+                                    ) {
+                                        if (uiState.recoveringStreak) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(16.dp),
+                                                strokeWidth = 2.dp,
+                                                color = colors.textPrimary,
+                                            )
+                                        } else {
+                                            Text("Recover Streak", fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     items(uiState.perks, key = { it.id }) { perk ->
                         PerkListItem(perk = perk, onClick = { onPerkTap(perk.id) })
                     }
                     item { Spacer(modifier = Modifier.height(16.dp)) }
+                }
+                SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
                 }
             }
         }

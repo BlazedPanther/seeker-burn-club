@@ -196,6 +196,9 @@ class HomeViewModel @Inject constructor(
                 level = level ?: it.level,
                 levelTitle = levelTitle ?: it.levelTitle,
                 streakShields = it.streakShields + (shieldsAwarded ?: 0),
+                streakRecoverable = false,
+                streakRecoveryDeadline = null,
+                streakRecoveryGapDays = 0,
                 lastXpGain = xpEarned ?: 0,
                 lastLevelUp = leveledUp == true,
             )
@@ -256,6 +259,9 @@ class HomeViewModel @Inject constructor(
                         hasBurnedToday = profile?.todayBurned ?: false,
                         streakShieldActive = profile?.streakShieldActive ?: false,
                         streakShields = profile?.streakShields ?: 0,
+                        streakRecoverable = profile?.streakRecoverable ?: false,
+                        streakRecoveryDeadline = profile?.streakRecoveryDeadline,
+                        streakRecoveryGapDays = profile?.streakRecoveryGapDays ?: 0,
                         xp = profile?.xp ?: 0,
                         level = profile?.level ?: 1,
                         levelTitle = profile?.levelTitle ?: "Spark",
@@ -309,6 +315,29 @@ class HomeViewModel @Inject constructor(
         return utcHour >= SeekerBurnConfig.STREAK_AT_RISK_UTC_HOUR
     }
 
+    fun recoverStreak() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(recoveringStreak = true) }
+            try {
+                val result = api.recoverStreak()
+                _uiState.update {
+                    it.copy(
+                        recoveringStreak = false,
+                        streakRecoverable = false,
+                        streakRecoveryDeadline = null,
+                        streakRecoveryGapDays = 0,
+                        streakShields = result.shieldsRemaining,
+                        currentStreak = result.currentStreak,
+                    )
+                }
+                _events.emit(HomeEvent.StreakRecovered(result.shieldsConsumed))
+            } catch (e: Exception) {
+                _uiState.update { it.copy(recoveringStreak = false) }
+                _events.emit(HomeEvent.Error(e.message ?: "Recovery failed"))
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         preflightJob?.cancel()
@@ -333,6 +362,10 @@ data class HomeUiState(
     val hasBurnedToday: Boolean = false,
     val streakShieldActive: Boolean = false,
     val streakShields: Int = 0,
+    val streakRecoverable: Boolean = false,
+    val streakRecoveryDeadline: String? = null,
+    val streakRecoveryGapDays: Int = 0,
+    val recoveringStreak: Boolean = false,
     val xp: Long = 0,
     val level: Int = 1,
     val levelTitle: String = "Spark",
@@ -371,4 +404,5 @@ sealed class HomeEvent {
     data object AlreadyBurnedToday : HomeEvent()
     data object TreasuryVerificationFailed : HomeEvent()
     data class Error(val message: String) : HomeEvent()
+    data class StreakRecovered(val shieldsConsumed: Int) : HomeEvent()
 }

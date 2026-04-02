@@ -53,14 +53,17 @@ export async function referralsRoutes(fastify: FastifyInstance) {
         rateKey,
       ) as number;
       if (count > 10) return reply.code(429).send({ error: 'RATE_LIMIT_EXCEEDED' });
-    } catch { /* Redis down — allow */ }
+    } catch {
+      // Redis down — fail closed to prevent brute-force code probing
+      return reply.code(503).send({ error: 'SERVICE_UNAVAILABLE' });
+    }
 
     try {
       const result = await applyReferralCode(wallet, code, deviceFingerprint, ip);
       return reply.code(200).send({ success: true, ...result });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'UNKNOWN_ERROR';
-      const code = (() => {
+      const statusCode = (() => {
         switch (msg) {
           case 'INVALID_REFERRAL_CODE_FORMAT':
             return 400;
@@ -76,7 +79,7 @@ export async function referralsRoutes(fastify: FastifyInstance) {
             return 400;
         }
       })();
-      return reply.code(code).send({ error: msg });
+      return reply.code(statusCode).send({ error: msg });
     }
   });
 }

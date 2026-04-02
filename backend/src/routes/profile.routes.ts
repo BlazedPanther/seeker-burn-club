@@ -37,12 +37,17 @@ export async function profileRoutes(fastify: FastifyInstance) {
     const today = todayUTC();
     const yesterday = yesterdayUTC(today);
 
+    // Check if user has an active recovery window (shields available, deadline set)
+    const hasRecoveryWindow = user.streakRecoveryDeadline && new Date(user.streakRecoveryDeadline) > new Date();
+    const streakRecoverable = !!hasRecoveryWindow && user.streakShields > 0;
+
     if (
       user.currentStreak > 0 &&
       user.lastBurnDate &&
       user.lastBurnDate !== today &&
       user.lastBurnDate !== yesterday &&
-      user.streakShields <= 0
+      user.streakShields <= 0 &&
+      !hasRecoveryWindow
     ) {
       streakBroken = true;
       previousStreak = user.currentStreak;
@@ -161,6 +166,9 @@ export async function profileRoutes(fastify: FastifyInstance) {
       totalDeposited: user.totalDeposited,
       streakShieldActive: user.streakShieldActive,
       streakShields: user.streakShields ?? 0,
+      streakRecoverable,
+      streakRecoveryDeadline: user.streakRecoveryDeadline?.toISOString() ?? null,
+      streakRecoveryGapDays: user.streakRecoveryGapDays ?? 0,
       xp: totalXp,
       level: levelInfo.currentLevel,
       levelTitle: getLevelTitle(levelInfo.currentLevel),

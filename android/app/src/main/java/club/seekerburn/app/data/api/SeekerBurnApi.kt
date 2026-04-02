@@ -58,6 +58,7 @@ interface SeekerBurnApi {
     suspend fun getShieldPacks(): ShieldShopResponse
     suspend fun purchaseShield(request: ShieldPurchaseRequest): ShieldPurchaseResponse
     suspend fun getShieldBalance(): ShieldBalanceResponse
+    suspend fun recoverStreak(): RecoverStreakResponse
 
     // Lucky Burns
     suspend fun getLuckyInventory(): InventoryResponse

@@ -42,25 +42,48 @@ export async function resetBrokenStreaks(): Promise<number> {
       return 0;
     }
 
-    // First: consume shields for users who would lose their streak but have shields available
-    const shieldResult = await tx.execute(sql`
+    // First: for users with shields who missed a day, set a 24h recovery window
+    // instead of auto-consuming shields. Users decide whether to use a shield.
+    const recoveryResult = await tx.execute(sql`
       UPDATE users
-      SET streak_shields = GREATEST(streak_shields - 1, 0),
-          streak_shield_active = CASE WHEN streak_shields > 1 THEN true ELSE false END,
-          last_burn_date = ${yesterday},
+      SET streak_recovery_deadline = NOW() + INTERVAL '24 hours',
+          streak_recovery_gap_days = GREATEST(
+            (DATE(${today} || 'T00:00:00Z') - DATE(last_burn_date || 'T00:00:00Z'))::int - 1,
+            1
+          ),
           updated_at = NOW()
       WHERE current_streak > 0
         AND streak_shields > 0
+        AND streak_recovery_deadline IS NULL
         AND last_burn_date < ${yesterday}
       RETURNING wallet_address, current_streak
     `);
-    const shieldRows = Array.isArray(shieldResult) ? shieldResult : [];
-    if (shieldRows.length > 0) {
-      securityLog({ eventType: 'STREAK_SHIELD_CONSUMED_JOB', severity: 'INFO', details: { count: shieldRows.length, date: today } });
-      log.info(`[Job] Consumed streak shields for ${shieldRows.length} users`);
+    const recoveryRows = Array.isArray(recoveryResult) ? recoveryResult : [];
+    if (recoveryRows.length > 0) {
+      securityLog({ eventType: 'STREAK_RECOVERY_WINDOW_OPENED', severity: 'INFO', details: { count: recoveryRows.length, date: today } });
+      log.info(`[Job] Opened recovery window for ${recoveryRows.length} users with shields`);
     }
 
-    // Then: reset streaks for unshielded users who missed burns
+    // Expire recovery windows that have passed: reset streak permanently
+    const expiredRecovery = await tx.execute(sql`
+      UPDATE users
+      SET current_streak = 0,
+          streak_broken_at = NOW(),
+          streak_recovery_deadline = NULL,
+          streak_recovery_gap_days = 0,
+          updated_at = NOW()
+      WHERE streak_recovery_deadline IS NOT NULL
+        AND streak_recovery_deadline < NOW()
+        AND current_streak > 0
+      RETURNING wallet_address, current_streak AS old_streak
+    `);
+    const expiredRows = Array.isArray(expiredRecovery) ? expiredRecovery : [];
+    if (expiredRows.length > 0) {
+      securityLog({ eventType: 'STREAK_RECOVERY_EXPIRED', severity: 'INFO', details: { count: expiredRows.length, date: today } });
+      log.info(`[Job] Expired recovery for ${expiredRows.length} users — streaks reset`);
+    }
+
+    // Then: reset streaks for unshielded users who missed burns (no recovery possible)
     const result = await tx.execute(sql`
       UPDATE users
       SET current_streak = 0,
@@ -68,12 +91,13 @@ export async function resetBrokenStreaks(): Promise<number> {
           updated_at = NOW()
       WHERE current_streak > 0
         AND streak_shields = 0
+        AND streak_recovery_deadline IS NULL
         AND last_burn_date < ${yesterday}
       RETURNING wallet_address, current_streak AS old_streak
     `);
 
     const rows = Array.isArray(result) ? result : [];
-    const count = rows.length;
+    const count = rows.length + expiredRows.length;
 
     if (count > 0) {
       await tx.insert(securityLogs).values({

@@ -435,10 +435,11 @@ export async function evaluateChallenges(
  */
 export async function recheckDailySweep(
   userId: string,
+  walletAddress: string,
   burnDate: string,
   txn: DB,
 ): Promise<{ dailySweepXp: number }> {
-  const dailyDefs = getDailyChallengesForDate(userId, burnDate);
+  const dailyDefs = getDailyChallengesForDate(walletAddress, burnDate);
   const progress = await txn
     .select({ challengeId: dailyChallengeProgress.challengeId, completed: dailyChallengeProgress.completed })
     .from(dailyChallengeProgress)

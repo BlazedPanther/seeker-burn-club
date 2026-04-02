@@ -61,8 +61,8 @@ const envSchema = z.object({
   REFERRAL_ENFORCE_SYBIL_CHECKS: envBoolean(true),
 
   // Shop
-  SOL_PRICE_USD: z.coerce.number().positive().default(150),
-  SKR_PRICE_USD: z.coerce.number().positive().default(0.10),
+  SOL_PRICE_USD: z.coerce.number().positive().default(79),
+  SKR_PRICE_USD: z.coerce.number().positive().default(0.017),
 });
 
 export const env = envSchema.parse(process.env);

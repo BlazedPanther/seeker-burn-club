@@ -215,7 +215,7 @@ export async function grantXp(
   const [updated] = await executor
     .update(users)
     .set({
-      xp: sql`${users.xp}::bigint + ${grant.amount}`,
+      xp: sql`${users.xp} + ${grant.amount}`,
       updatedAt: new Date(),
     })
     .where(eq(users.id, grant.userId))

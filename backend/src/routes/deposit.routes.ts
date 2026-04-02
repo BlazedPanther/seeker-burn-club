@@ -60,9 +60,12 @@ async function verifyDeposit(
     if (programId?.equals(TOKEN_PROGRAM_ID)) {
       const data = Buffer.from(ix.data);
       if (data[0] === 3 || data[0] === 12) { // Transfer or TransferChecked
-        // Transfer (3): [source, destination, authority]
-        // TransferChecked (12): [source, mint, destination, authority]
+        if (data.length < 9) continue; // Skip malformed instructions
+        // Transfer (3): [source, destination, authority] — needs 3 accounts
+        // TransferChecked (12): [source, mint, destination, authority] — needs 4 accounts
         const accountIndices = ix.accountKeyIndexes;
+        const minAccounts = data[0] === 12 ? 4 : 3;
+        if (accountIndices.length < minAccounts) continue; // Skip malformed instructions
         const source = resolveKey(accountIndices[0]!);
         const destination = data[0] === 12
           ? resolveKey(accountIndices[2]!)
@@ -104,7 +107,7 @@ async function verifyDeposit(
     securityLog({ eventType: 'DEPOSIT_TX_TOO_OLD', walletAddress, severity: 'WARN', details: { signature, blockTime: tx.blockTime, serverTime: now } });
     throw new Error('TRANSACTION_TOO_OLD');
   }
-  if (tx.blockTime - now > 60) {
+  if (tx.blockTime - now > 120) {
     securityLog({ eventType: 'DEPOSIT_TX_FUTURE', walletAddress, severity: 'WARN', details: { signature, blockTime: tx.blockTime, serverTime: now } });
     throw new Error('TRANSACTION_FROM_FUTURE');
   }
@@ -137,7 +140,8 @@ export async function depositRoutes(fastify: FastifyInstance) {
         return reply.code(429).send({ error: 'RATE_LIMIT_EXCEEDED', message: 'Max 5 deposit submissions per minute per wallet.' });
       }
     } catch {
-      // Redis unavailable — allow the request rather than blocking all deposits
+      // Redis unavailable — fail closed to prevent unlimited requests
+      return reply.code(503).send({ error: 'SERVICE_UNAVAILABLE', message: 'Please try again shortly.' });
     }
 
     try {

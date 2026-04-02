@@ -277,6 +277,13 @@ class SeekerBurnApiImpl @Inject constructor(
         }.body()
     }
 
+    override suspend fun recoverStreak(): RecoverStreakResponse {
+        val token = requireAuthToken()
+        return client.post("/api/v1/shields/recover") {
+            bearerAuth(token)
+        }.body()
+    }
+
     override suspend fun getLuckyInventory(): InventoryResponse {
         val token = requireAuthToken()
         return client.get("/api/v1/lucky/inventory") {

@@ -21,7 +21,7 @@
 import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { users, shieldPurchases } from '../db/schema.js';
-import { connection, getMintDecimals, TOKEN_PROGRAM_ID } from '../lib/solana.js';
+import { connection, getMintDecimals, TOKEN_PROGRAM_ID, getUserSkrAta } from '../lib/solana.js';
 import { env } from '../config/env.js';
 import { securityLog } from '../lib/security.js';
 import { PublicKey } from '@solana/web3.js';
@@ -31,7 +31,7 @@ import { getTokenPrices, type TokenPrices } from '../lib/price.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 export const MAX_SHIELDS = 10;
-const PRICE_TOLERANCE = 0.15; // 15% tolerance for price volatility
+const PRICE_TOLERANCE = 0.05; // 5% tolerance for price volatility
 const QUOTE_TTL_MS = 5 * 60 * 1000; // 5 min quote validity
 
 // ── Price quote signing (HMAC-SHA256) ──
@@ -180,7 +180,10 @@ export async function verifyShieldPurchase(
     // SPL TransferChecked (12): [source, mint, destination, authority]
     if (data.length >= 9 && (data[0] === 3 || data[0] === 12)) {
       const instructionType = data[0];
+      const minAccounts = instructionType === 12 ? 4 : 3;
+      if (ix.accountKeyIndexes.length < minAccounts) continue;
       const amount = data.readBigUInt64LE(1);
+      const source = messageAccountKeys.get(ix.accountKeyIndexes[0]!);
       const dest = instructionType === 12
         ? messageAccountKeys.get(ix.accountKeyIndexes[2]!)
         : messageAccountKeys.get(ix.accountKeyIndexes[1]!);
@@ -188,7 +191,8 @@ export async function verifyShieldPurchase(
         ? messageAccountKeys.get(ix.accountKeyIndexes[3]!)
         : messageAccountKeys.get(ix.accountKeyIndexes[2]!);
 
-      if (dest?.equals(treasuryAta) && owner?.equals(walletKey)) {
+      const expectedSource = getUserSkrAta(walletAddress);
+      if (source?.equals(expectedSource) && dest?.equals(treasuryAta) && owner?.equals(walletKey)) {
         actualAmount = amount;
         transferVerified = true;
       }

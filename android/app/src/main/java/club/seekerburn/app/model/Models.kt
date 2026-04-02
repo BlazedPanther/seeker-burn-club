@@ -19,6 +19,9 @@ data class UserProfile(
     val totalDeposited: String = "0.000000",
     val streakShieldActive: Boolean = false,
     val streakShields: Int = 0,
+    val streakRecoverable: Boolean = false,
+    val streakRecoveryDeadline: String? = null,
+    val streakRecoveryGapDays: Int = 0,
     val xp: Long = 0,
     val level: Int = 1,
     val levelTitle: String = "Spark",
@@ -516,6 +519,14 @@ data class ShieldPurchaseResponse(
 data class ShieldBalanceResponse(
     val shields: Int,
     val maxShields: Int = 10,
+)
+
+@Serializable
+data class RecoverStreakResponse(
+    val ok: Boolean = true,
+    val shieldsConsumed: Int = 0,
+    val shieldsRemaining: Int = 0,
+    val currentStreak: Int = 0,
 )
 
 // ──────────────────────────────────────────

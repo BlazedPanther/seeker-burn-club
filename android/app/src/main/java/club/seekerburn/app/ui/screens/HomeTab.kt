@@ -92,6 +92,8 @@ fun HomeTab(
                     snackbarHostState.showSnackbar("Treasury verification failed. Try again later.")
                 is club.seekerburn.app.viewmodel.HomeEvent.Error ->
                     snackbarHostState.showSnackbar(event.message)
+                is club.seekerburn.app.viewmodel.HomeEvent.StreakRecovered ->
+                    snackbarHostState.showSnackbar("Streak recovered! Used ${event.shieldsConsumed} shield(s)")
             }
         }
     }
@@ -254,6 +256,58 @@ fun HomeTab(
                         color = colors.error.copy(alpha = 0.8f),
                         textAlign = TextAlign.Center,
                     )
+                }
+            }
+        }
+
+        // Streak Recovery banner — user can manually use shields to save their streak
+        if (uiState.streakRecoverable && uiState.streakShields >= uiState.streakRecoveryGapDays) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.accent.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "\uD83D\uDEE1\uFE0F Streak in Danger!",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.accent,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Use ${uiState.streakRecoveryGapDays} Shield(s) to save your ${uiState.currentStreak}-day streak",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.accent.copy(alpha = 0.8f),
+                        textAlign = TextAlign.Center,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    androidx.compose.material3.Button(
+                        onClick = { viewModel.recoverStreak() },
+                        enabled = !uiState.recoveringStreak,
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = colors.accent,
+                        ),
+                    ) {
+                        if (uiState.recoveringStreak) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = colors.textPrimary,
+                            )
+                        } else {
+                            Text(
+                                text = "Recover Streak",
+                                fontWeight = FontWeight.Bold,
+                                color = colors.bg,
+                            )
+                        }
+                    }
                 }
             }
         }
